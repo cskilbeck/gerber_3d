@@ -97,10 +97,6 @@ namespace gerber_lib
 
             if(start_degrees >= end_degrees) {
                 end_degrees += 360.0;
-                if(end_degrees > 360.0) {
-                    start_degrees -= 360.0;
-                    end_degrees -= 360.0;
-                }
             }
 
             // get the endpoints of the arc
@@ -121,13 +117,10 @@ namespace gerber_lib
             // check if the arc goes through any cardinal points
 
             auto crosses_cardinal = [&](double d) {
-                if(start_degrees <= end_degrees) {
-                    return start_degrees <= d && d < end_degrees;
-                }
-                return start_degrees <= d || d < end_degrees;
+                return start_degrees <= d && d < end_degrees;
             };
 
-            if(crosses_cardinal(0)) {
+            if(crosses_cardinal(0) || crosses_cardinal(360)) {
                 extent.max_pos.x = center.x + radius;
             }
             if(crosses_cardinal(90)) {
