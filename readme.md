@@ -17,3 +17,13 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+
+## Building
+
+Currently, it will only build for Windows due to the GDI Drawer. This could be replaced with, for example a Cairo drawer.
+
+The build system is CMake
+
+It depends on Open Cascade for the 3D bit, see: https://dev.opencascade.org/doc/occt-7.4.0/overview/html/occt_dev_guides__building_cmake.html
+
+
