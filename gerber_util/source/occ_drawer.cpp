@@ -8,6 +8,7 @@
 #include <gp_Pln.hxx>
 #include <gp_Circ.hxx>
 #include <TopoDS.hxx>
+#include <TopoDS_Solid.hxx>
 #include <BRepTools.hxx>
 #include <BRepBuilderAPI_MakeFace.hxx>
 #include <BRepBuilderAPI_MakePolygon.hxx>
@@ -21,6 +22,8 @@
 #include <BRepBuilderAPI_MakeEdge.hxx>
 #include <BRepBuilderAPI_MakeWire.hxx>
 #include <BRepFeat_Builder.hxx>
+#include <ShapeFix_Solid.hxx>
+#include <ShapeFix_Face.hxx>
 
 LOG_CONTEXT("OCC", debug);
 
@@ -51,20 +54,37 @@ namespace
 
     //////////////////////////////////////////////////////////////////////
 
+    void dump_shape(TopoDS_Shape const &shape, int indent)
+    {
+        std::string indent_str(indent, ' ');
+        LOG_INFO("{}Shape is a {}", indent_str, (int)shape.ShapeType());
+        int index = 0;
+        for(TopoDS_Iterator face_iterator(shape); face_iterator.More(); face_iterator.Next()) {
+            LOG_INFO("{}Subshape {} is a {}", indent_str, index, (int)(face_iterator.Value().ShapeType()));
+            index += 1;
+            dump_shape(face_iterator.Value(), indent + 4);
+        }
+    }
+
+    //////////////////////////////////////////////////////////////////////
+
     void boolean_face(TopoDS_Shape const &tool_face, TopoDS_Shape &final_face, BOPAlgo_Operation operation)
     {
-        //BRepFeat_Builder b;
-        //b.Init(final_face, tool_face);
-        //b.SetOperation(operation == BOPAlgo_CUT ? 0 : 1);
-        //b.Perform();
-        //final_face = b.Shape();
+        // BRepFeat_Builder b;
+        // b.Init(final_face, tool_face);
+        // b.SetOperation(operation == BOPAlgo_CUT ? 0 : 1);
+        // b.Perform();
+        // final_face = b.Shape();
 
-         BOPAlgo_BOP builder;
-         builder.SetOperation(operation);
-         builder.AddArgument(final_face);
-         builder.AddTool(tool_face);
-         builder.Perform();
-         final_face = builder.Shape();
+        BOPAlgo_BOP builder;
+        builder.SetOperation(operation);
+        builder.AddArgument(final_face);
+        builder.AddTool(tool_face);
+        builder.Perform();
+
+        final_face = builder.Shape();
+
+        // dump_shape(final_face, 0);
     }
 
     //////////////////////////////////////////////////////////////////////
@@ -112,7 +132,7 @@ namespace gerber_3d
 
         g->draw(*this, elements_to_hide);
 
-        double const depth = 0.5;
+        double const depth = 0.25;
         // double const depth = 1.0;
 
         if(!main_face.IsNull()) {
@@ -125,7 +145,9 @@ namespace gerber_3d
             BRepPrimAPI_MakePrism prism(main_face, gp_Vec(0, 0, depth));
             prism.Build();
 
-            vout.add_shape(prism.Shape());
+            TopoDS_Shape main_shape = prism.Shape();
+
+            vout.add_shape(main_shape);
 
             vout.add_shapes_to_scene();
         }
@@ -163,14 +185,12 @@ namespace gerber_3d
                 up_axis2.SetLocation(gp_Pnt(e.arc_center.x, e.arc_center.y, 0));
                 wire.Add(BRepBuilderAPI_MakeEdge(gp_Circ(up_axis2, e.radius), start, end));
             } break;
-
             }
         }
         wire.Build();
         if(wire.IsDone()) {
             BRepBuilderAPI_MakeFace face(wire);
-
-            TopoDS_Face the_face = face.Face();
+            TopoDS_Shape the_face = face.Face();
 
             switch(polarity) {
 
