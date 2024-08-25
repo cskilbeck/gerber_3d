@@ -2124,7 +2124,7 @@ namespace gerber_lib
     gerber_error_code gerber::draw_linear_track(gerber_draw_interface &drawer, vec2d start, vec2d end, double width, gerber_polarity polarity)
     {
         if(start.x == end.x && start.y == end.y) {
-            return ok;
+            return draw_circle(drawer, start, width, polarity);
         }
 
         double hw = width / 2;
