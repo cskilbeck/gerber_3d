@@ -83,22 +83,6 @@ namespace gerber_lib
 
         void get_arc_extents(vec2d const &center, double radius, double start_degrees, double end_degrees, rect &extent)
         {
-            // normalize the angles
-
-            start_degrees = fmod(start_degrees, 360.0);
-            if(start_degrees < 0.0) {
-                start_degrees += 360.0;
-            }
-
-            end_degrees = fmod(end_degrees, 360.0);
-            if(end_degrees < 0.0) {
-                end_degrees += 360.0;
-            }
-
-            if(start_degrees >= end_degrees) {
-                end_degrees += 360.0;
-            }
-
             // get the endpoints of the arc
 
             auto arc_point = [&](double d) {
@@ -116,11 +100,23 @@ namespace gerber_lib
 
             // check if the arc goes through any cardinal points
 
+            double s = fmod(start_degrees, 360.0);
+            if(s < 0) {
+                s += 360.0;
+            }
+            double e = fmod(end_degrees, 360.0);
+            if(e < 0) {
+                e += 360.0;
+            }
+
             auto crosses_cardinal = [&](double d) {
-                return start_degrees <= d && d < end_degrees;
+                if(s <= e) {
+                    return s <= d && d < e;
+                }
+                return s <= d || d < e;
             };
 
-            if(crosses_cardinal(0) || crosses_cardinal(360)) {
+            if(crosses_cardinal(0)) {
                 extent.max_pos.x = center.x + radius;
             }
             if(crosses_cardinal(90)) {
