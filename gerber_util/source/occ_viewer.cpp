@@ -47,6 +47,7 @@
 #include <BRep_Builder.hxx>
 #include <BRepTools.hxx>
 #include <STEPControl_Writer.hxx>
+#include <ShapeFix_Shape.hxx>
 
 LOG_CONTEXT("occ", debug);
 
@@ -87,19 +88,35 @@ namespace
 
 void occ_viewer::save_brep()
 {
+    LOG_CONTEXT("export", info);
+    char const *brep_filename = "F:\\test.brep";
+    char const *step_filename = "F:\\test.step";
+
+    LOG_INFO("Export begins, applying ShapeFix_Shape...");
+
     TopoDS_Compound compound;
+    STEPControl_Writer step_writer;
     BRep_Builder builder;
     builder.MakeCompound(compound);
+    int num_shapes = 0;
     for(auto const &sh : shapes) {
-        builder.Add(compound, sh);
+
+        ShapeFix_Shape fixer(sh);
+        fixer.Perform();
+        builder.Add(compound, fixer.Shape());
+        num_shapes += 1;
     }
+
+    LOG_INFO("ShapeFix_Shape applied to {} shapes", num_shapes);
+
+    LOG_INFO("Saving BREP to {}", brep_filename);
     BRepTools::Write(compound, "F:\\test.brep", true, false, TopTools_FormatVersion_VERSION_2);
 
-    STEPControl_Writer step_writer;
-    for(auto const &sh : shapes) {
-        step_writer.Transfer(sh, STEPControl_AsIs);
-    }
+    LOG_INFO("Saving STEP to {}", step_filename);
+    step_writer.Transfer(compound, STEPControl_AsIs);
     step_writer.Write("F:\\test.step");
+
+    LOG_INFO("Export complete");
 }
 
 //////////////////////////////////////////////////////////////////////
