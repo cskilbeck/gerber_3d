@@ -11,20 +11,15 @@ namespace gerber_lib
         gerber_timer() = default;
 
         std::chrono::time_point<std::chrono::high_resolution_clock> time_point_begin;
-        std::chrono::time_point<std::chrono::high_resolution_clock> time_point_end;
 
-        void start()
+        void reset()
         {
             time_point_begin = std::chrono::high_resolution_clock::now();
         }
 
-        void stop()
-        {
-            time_point_end = std::chrono::high_resolution_clock::now();
-        }
-
         double elapsed_seconds() const
         {
+            auto time_point_end = std::chrono::high_resolution_clock::now();
             auto diff = time_point_end - time_point_begin;
             auto microseconds = std::chrono::duration_cast<std::chrono::microseconds>(diff);
             return microseconds.count() / 1000000.0;

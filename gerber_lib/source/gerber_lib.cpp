@@ -2339,24 +2339,27 @@ namespace gerber_lib
         };
 
         size_t num_nets = image.nets.size();
-        size_t percent = 0;
+        double percent = 0;
 
         gerber_timer timer;
+        gerber_timer interim_timer;
 
-        if(drawer.show_percent_progress) {
+        if(drawer.show_progress) {
             LOG_DEBUG("DRAW BEGINS, {} nets", num_nets);
-            timer.start();
+            timer.reset();
+            interim_timer.reset();
         }
 
         drawer.current_net_id = 0;
 
         for(size_t net_index = 0; net_index < image.nets.size(); net_index = next_net_index(net_index)) {
 
-            if(drawer.show_percent_progress) {
-                size_t new_percent = net_index * 100 / num_nets;
-                if(new_percent != percent) {
-                    LOG_DEBUG("{}%", new_percent);
+            if(drawer.show_progress) {
+                double new_percent = net_index * 100.0 / num_nets;
+                if((new_percent - percent) >= 1 || interim_timer.elapsed_seconds() > 1) {
+                    LOG_DEBUG("{:5.2f}% ({} of {} nets)", new_percent, net_index, num_nets);
                     percent = new_percent;
+                    interim_timer.reset();
                 }
             }
 
@@ -2522,8 +2525,7 @@ namespace gerber_lib
                 }
             }
         }
-        if(drawer.show_percent_progress) {
-            timer.stop();
+        if(drawer.show_progress) {
             LOG_DEBUG("DRAW COMPLETE, {} nets took {} seconds", num_nets, timer.elapsed_seconds());
         }
         return ok;

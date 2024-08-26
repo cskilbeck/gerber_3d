@@ -92,7 +92,7 @@ namespace gerber_lib
         // draw a filled shape of lines/arcs
         virtual void fill_elements(gerber_draw_element const *elements, size_t num_elements, gerber_polarity polarity) = 0;
 
-        bool show_percent_progress{ false };
+        bool show_progress{ false };
 
         int current_net_id{ 0 };
     };
