@@ -2140,19 +2140,19 @@ namespace gerber_lib
 
     gerber_error_code gerber::draw_linear_track(gerber_draw_interface &drawer, vec2d start, vec2d end, double width, gerber_polarity polarity) const
     {
-        if(start.x == end.x && start.y == end.y) {
-            return draw_circle(drawer, start, width, polarity);
-        }
+        double thickness = width / 2;
 
-        double hw = width / 2;
+        if(start.x == end.x && start.y == end.y) {
+            return draw_circle(drawer, start, thickness, polarity);
+        }
 
         double dx = end.x - start.x;
         double dy = end.y - start.y;
 
         double rad = atan2(dy, dx);
 
-        double ox = cos(rad) * hw;
-        double oy = sin(rad) * hw;
+        double ox = cos(rad) * thickness;
+        double oy = sin(rad) * thickness;
 
         double deg = rad_2_deg(rad);
 
@@ -2161,10 +2161,10 @@ namespace gerber_lib
         vec2d p3(end.x - oy, end.y + ox);
         vec2d p4(start.x - oy, start.y + ox);
 
-        gerber_draw_element e[4] = { gerber_draw_element(p2, p1),                              //
-                                     gerber_draw_element(end, deg - 90, deg + 90, hw),         //
-                                     gerber_draw_element(p4, p3),                              //
-                                     gerber_draw_element(start, deg + 90, deg + 270, hw) };    //
+        gerber_draw_element e[4] = { gerber_draw_element(p2, p1),                                     //
+                                     gerber_draw_element(end, deg - 90, deg + 90, thickness),         //
+                                     gerber_draw_element(p4, p3),                                     //
+                                     gerber_draw_element(start, deg + 90, deg + 270, thickness) };    //
 
         drawer.fill_elements(e, 4, polarity);
         return ok;
