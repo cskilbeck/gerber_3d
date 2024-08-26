@@ -1673,6 +1673,13 @@ namespace gerber_lib
                     break;
                 }
 
+                // round to nearest N decimal places
+
+                auto round_to = [](double D, int N) {
+                    double m = pow(10.0, N);
+                    return round(D * m) / m;
+                };
+
                 net = new gerber_net(&image, net, state.level, state.net_state);
                 net->line_number = reader.line_number;
 
@@ -1681,12 +1688,17 @@ namespace gerber_lib
 
                 net->start.x = state.previous_x / scale.x;
                 net->start.y = state.previous_y / scale.y;
-
                 net->end.x = state.current_x / scale.x;
                 net->end.y = state.current_y / scale.y;
-
                 center.x = state.center_x / scale.x;
                 center.y = state.center_y / scale.y;
+
+                net->start.x = round_to(net->start.x, accuracy_decimal_places);
+                net->start.y = round_to(net->start.y, accuracy_decimal_places);
+                net->end.x = round_to(net->end.x, accuracy_decimal_places);
+                net->end.y = round_to(net->end.y, accuracy_decimal_places);
+                center.x = round_to(center.x, accuracy_decimal_places);
+                center.y = round_to(center.y, accuracy_decimal_places);
 
                 if(!state.is_region_fill) {
                     bounding_box = whole_box;
@@ -1756,6 +1768,11 @@ namespace gerber_lib
                         net->start.y = state.previous_y / scale.y;
                         net->end.x = state.current_x / scale.x;
                         net->end.y = state.current_y / scale.y;
+
+                        net->start.x = round_to(net->start.x, accuracy_decimal_places);
+                        net->start.y = round_to(net->start.y, accuracy_decimal_places);
+                        net->end.x = round_to(net->end.x, accuracy_decimal_places);
+                        net->end.y = round_to(net->end.y, accuracy_decimal_places);
 
                     } else if(state.interpolation != interpolation_region_start) {
                         region_points += 1;

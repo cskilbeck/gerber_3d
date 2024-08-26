@@ -44,6 +44,8 @@ namespace gerber_lib
 
         gerber_level knockout_level{};
 
+        int accuracy_decimal_places{ 3 };
+
         int current_net_id{};
 
         bool is_gerber_274d(std::string file_path)

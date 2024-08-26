@@ -171,6 +171,7 @@ void occ_viewer::add_shapes_to_scene()
 
     for(auto const &sh : shapes) {
         Handle(AIS_Shape) shape = new AIS_Shape(sh);
+        interactive_context->SetAngleAndDeviation(shape, 1 * M_PI / 180, false);
         interactive_context->Display(shape, true);
         interactive_context->SetDisplayMode(shape, mode, true);
         adjust_selection_style(interactive_context);
