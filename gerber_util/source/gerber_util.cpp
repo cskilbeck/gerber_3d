@@ -1,6 +1,7 @@
 //////////////////////////////////////////////////////////////////////
 
 #include <stdio.h>
+#include <thread>
 #include <iostream>
 #include <format>
 
@@ -61,15 +62,15 @@ int main()
         return 1;
     }
 
-#if 1
-    //hide |= hide_element_lines;
-    //hide |= hide_element_arcs;
-    //hide |= hide_element_circles;
-    //hide |= hide_element_rectangles;
-    //hide |= hide_element_ovals;
-    //hide |= hide_element_polygons;
-    //hide |= hide_element_outlines;
-    //hide |= hide_element_macros;
+#if 0
+    hide |= hide_element_lines;
+    // hide |= hide_element_arcs;
+    hide |= hide_element_circles;
+    hide |= hide_element_rectangles;
+    hide |= hide_element_ovals;
+    hide |= hide_element_polygons;
+    hide |= hide_element_outlines;
+    hide |= hide_element_macros;
 #endif
 
 #if defined(SHOW_GDI)
@@ -78,19 +79,36 @@ int main()
     gdi.set_gerber(&g, hide);
 #endif
 
+    // For OCC, create the mesh in a thread
+
+    HANDLE occ_event = CreateEvent(nullptr, false, false, nullptr);
+
 #if defined(SHOW_3D)
     gerber_3d::occ_drawer occ;
     occ.show_percent_progress = true;
     occ.create_window(100, 100, 700, 700);
+    std::thread([&]() {
+        occ.set_gerber(&g, hide);
+
+        // tell main thread that the mesh is ready to add to the scene
+        SetEvent(occ_event);
+    }).detach();
 #endif
 
     MSG msg;
-    int loops = 0;
+
+    HANDLE events[] = { occ_event };
 
     while(true) {
 
-        if(MsgWaitForMultipleObjectsEx(0, NULL, 12, QS_ALLINPUT, 0) == WAIT_OBJECT_0) {
+        switch(MsgWaitForMultipleObjects((DWORD)array_length(events), events, false, 12, QS_ALLEVENTS)) {
 
+        case WAIT_OBJECT_0:
+            // add mesh to scene
+            occ.on_gerber_finished();
+            break;
+
+        case WAIT_OBJECT_0 + 1:
             while(PeekMessageA(&msg, NULL, 0, 0, PM_REMOVE)) {
 
                 if(msg.message == WM_QUIT) {
@@ -100,16 +118,7 @@ int main()
                 TranslateMessage(&msg);
                 DispatchMessageA(&msg);
             }
+            break;
         }
-
-        loops += 1;
-
-#if defined(SHOW_3D)
-        if(loops == 16) {
-            if(occ.gerber_file == nullptr) {
-                occ.set_gerber(&g, hide);
-            }
-        }
-#endif
     }
 }

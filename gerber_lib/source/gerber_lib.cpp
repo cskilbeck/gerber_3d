@@ -1979,7 +1979,7 @@ namespace gerber_lib
 
     //////////////////////////////////////////////////////////////////////
 
-    gerber_error_code gerber::fill_region_path(gerber_draw_interface &drawer, size_t net_index, gerber_polarity polarity)
+    gerber_error_code gerber::fill_region_path(gerber_draw_interface &drawer, size_t net_index, gerber_polarity polarity) const
     {
         std::vector<gerber_draw_element> elements;
 
@@ -2016,20 +2016,20 @@ namespace gerber_lib
                 }
             }
         }
-        drawer.fill_elements(elements.data(), elements.size(), polarity, current_net_id);
+        drawer.fill_elements(elements.data(), elements.size(), polarity);
         return ok;
     }
 
     //////////////////////////////////////////////////////////////////////
 
-    gerber_error_code gerber::fill_polygon(gerber_draw_interface &drawer, double diameter, int num_sides, double angle_degrees)
+    gerber_error_code gerber::fill_polygon(gerber_draw_interface &drawer, double diameter, int num_sides, double angle_degrees) const
     {
         return ok;
     }
 
     //////////////////////////////////////////////////////////////////////
 
-    gerber_error_code gerber::draw_macro(gerber_draw_interface &drawer, gerber_net *current_net, gerber_aperture *const macro_aperture)
+    gerber_error_code gerber::draw_macro(gerber_draw_interface &drawer, gerber_net *current_net, gerber_aperture *const macro_aperture) const
     {
         for(auto m : macro_aperture->macro_parameters_list) {
 
@@ -2053,7 +2053,7 @@ namespace gerber_lib
                 m = matrix_multiply(m, make_translation(current_net->end));
                 pos = transform_point(m, pos);
                 gerber_draw_element e(pos, 0, 360, diameter / 2);
-                drawer.fill_elements(&e, 1, polarity, current_net_id);
+                drawer.fill_elements(&e, 1, polarity);
             } break;
 
             case aperture_type_macro_moire: {
@@ -2095,7 +2095,7 @@ namespace gerber_lib
                     e[1] = gerber_draw_element(points[3], points[2]);
                     e[2] = gerber_draw_element(points[2], points[1]);
                     e[3] = gerber_draw_element(points[1], points[0]);
-                    drawer.fill_elements(e, 4, polarity_dark, current_net_id);
+                    drawer.fill_elements(e, 4, polarity_dark);
                 }
             } break;
 
@@ -2124,7 +2124,7 @@ namespace gerber_lib
                     e[1] = gerber_draw_element(points[3], points[2]);
                     e[2] = gerber_draw_element(points[2], points[1]);
                     e[3] = gerber_draw_element(points[1], points[0]);
-                    drawer.fill_elements(e, 4, polarity_dark, current_net_id);
+                    drawer.fill_elements(e, 4, polarity_dark);
                 }
             } break;
 
@@ -2138,7 +2138,7 @@ namespace gerber_lib
 
     //////////////////////////////////////////////////////////////////////
 
-    gerber_error_code gerber::draw_linear_track(gerber_draw_interface &drawer, vec2d start, vec2d end, double width, gerber_polarity polarity)
+    gerber_error_code gerber::draw_linear_track(gerber_draw_interface &drawer, vec2d start, vec2d end, double width, gerber_polarity polarity) const
     {
         if(start.x == end.x && start.y == end.y) {
             return draw_circle(drawer, start, width, polarity);
@@ -2166,22 +2166,22 @@ namespace gerber_lib
                                      gerber_draw_element(p4, p3),                              //
                                      gerber_draw_element(start, deg + 90, deg + 270, hw) };    //
 
-        drawer.fill_elements(e, 4, polarity, current_net_id);
+        drawer.fill_elements(e, 4, polarity);
         return ok;
     }
 
     //////////////////////////////////////////////////////////////////////
 
-    gerber_error_code gerber::draw_circle(gerber_draw_interface &drawer, vec2d const &pos, double radius, gerber_polarity polarity)
+    gerber_error_code gerber::draw_circle(gerber_draw_interface &drawer, vec2d const &pos, double radius, gerber_polarity polarity) const
     {
         gerber_draw_element e(pos, 0.0, 360.0, radius);
-        drawer.fill_elements(&e, 1, polarity, current_net_id);
+        drawer.fill_elements(&e, 1, polarity);
         return ok;
     }
 
     //////////////////////////////////////////////////////////////////////
 
-    gerber_error_code gerber::draw_arc(gerber_draw_interface &drawer, gerber_arc const &arc, double thickness, gerber_polarity polarity)
+    gerber_error_code gerber::draw_arc(gerber_draw_interface &drawer, gerber_arc const &arc, double thickness, gerber_polarity polarity) const
     {
         vec2d const &pos = arc.pos;
         double start_angle = arc.start_angle;
@@ -2280,14 +2280,14 @@ namespace gerber_lib
             }
         }
         if(n != 0) {
-            drawer.fill_elements(draw_elements, n, polarity, current_net_id);
+            drawer.fill_elements(draw_elements, n, polarity);
         }
         return ok;
     }
 
     //////////////////////////////////////////////////////////////////////
 
-    gerber_error_code gerber::draw_capsule(gerber_draw_interface &drawer, vec2d const &center, double width, double height, gerber_polarity polarity)
+    gerber_error_code gerber::draw_capsule(gerber_draw_interface &drawer, vec2d const &center, double width, double height, gerber_polarity polarity) const
     {
         gerber_draw_element el[4];
 
@@ -2304,7 +2304,7 @@ namespace gerber_lib
             el[1] = gerber_draw_element(tl2, { br2.x, tl1.y });
             el[2] = gerber_draw_element({ br2.x, center.y }, 270, 450, h2);
             el[3] = gerber_draw_element(br2, { tl2.x, br1.y });
-            drawer.fill_elements(el, 4, polarity, current_net_id);
+            drawer.fill_elements(el, 4, polarity);
         } else {
             vec2d tl2{ tl1.x, tl1.y + w2 };
             vec2d br2{ br1.x, br1.y - w2 };
@@ -2312,14 +2312,14 @@ namespace gerber_lib
             el[1] = gerber_draw_element({ br2.x, tl2.y }, br2);
             el[2] = gerber_draw_element({ center.x, br2.y }, 0, 180, w2);
             el[3] = gerber_draw_element({ tl2.x, br2.y }, tl2);
-            drawer.fill_elements(el, 4, polarity, current_net_id);
+            drawer.fill_elements(el, 4, polarity);
         }
         return ok;
     }
 
     //////////////////////////////////////////////////////////////////////
 
-    gerber_error_code gerber::draw(gerber_draw_interface &drawer, int const hide_elements, int start_net_index, int end_net_index)
+    gerber_error_code gerber::draw(gerber_draw_interface &drawer, int const hide_elements, int start_net_index, int end_net_index) const
     {
         auto should_hide = [=](gerber_hide_elements h) { return (static_cast<int>(h) & hide_elements) != 0; };
 
@@ -2348,7 +2348,7 @@ namespace gerber_lib
             timer.start();
         }
 
-        current_net_id = 0;
+        drawer.current_net_id = 0;
 
         for(size_t net_index = 0; net_index < image.nets.size(); net_index = next_net_index(net_index)) {
 
@@ -2375,9 +2375,9 @@ namespace gerber_lib
                 continue;
             }
 
-            current_net_id += 1;
+            drawer.current_net_id += 1;
 
-            if((start_net_index != 0 && current_net_id < start_net_index) || (end_net_index != 0 && current_net_id > end_net_index)) {
+            if((start_net_index != 0 && drawer.current_net_id < start_net_index) || (end_net_index != 0 && drawer.current_net_id > end_net_index)) {
                 continue;
             }
 
@@ -2508,7 +2508,7 @@ namespace gerber_lib
                                     // e.start_degrees = std::min(n->circle_segment.start_angle, n->circle_segment.end_angle);
                                     // e.end_degrees = std::max(n->circle_segment.start_angle, n->circle_segment.end_angle);
                                     // e.radius = n->circle_segment.size.x / 2;
-                                    // drawer.draw_element(e, aperture->parameters[0], n->level->polarity, current_net_id);
+                                    // drawer.draw_element(e, aperture->parameters[0], n->level->polarity, drawer.current_net_id);
                                 }
                             }
                             break;

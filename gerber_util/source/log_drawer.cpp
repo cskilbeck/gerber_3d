@@ -18,9 +18,9 @@ namespace gerber_3d
 
     //////////////////////////////////////////////////////////////////////
 
-    void log_drawer::fill_elements(gerber_lib::gerber_draw_element const *elements, size_t num_elements, gerber_lib::gerber_polarity polarity, int net_index)
+    void log_drawer::fill_elements(gerber_lib::gerber_draw_element const *elements, size_t num_elements, gerber_lib::gerber_polarity polarity)
     {
-        LOG_DEBUG("fill net:{},elements:{},polarity:{}", net_index, num_elements, polarity);
+        LOG_DEBUG("fill net:{},elements:{},polarity:{}", current_net_id, num_elements, polarity);
         for(size_t n = 0; n < num_elements; ++n) {
             LOG_DEBUG("[{}]={}", n, elements[n]);
         }

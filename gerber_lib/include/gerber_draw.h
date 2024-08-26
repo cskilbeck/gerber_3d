@@ -90,9 +90,11 @@ namespace gerber_lib
         virtual void set_gerber(gerber *g, int hide_elements = hide_element_none) = 0;
 
         // draw a filled shape of lines/arcs
-        virtual void fill_elements(gerber_draw_element const *elements, size_t num_elements, gerber_polarity polarity, int net_index) = 0;
+        virtual void fill_elements(gerber_draw_element const *elements, size_t num_elements, gerber_polarity polarity) = 0;
 
         bool show_percent_progress{ false };
+
+        int current_net_id{ 0 };
     };
 
 }    // namespace gerber_lib

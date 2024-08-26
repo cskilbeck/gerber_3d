@@ -186,7 +186,11 @@ void occ_viewer::add_shapes_to_scene()
 {
     AIS_DisplayMode mode = AIS_Shaded;
 
+    LOG_INFO("Adding shapes to scene");
+
+    int shape_index = 0;
     for(auto const &sh : shapes) {
+        LOG_INFO("Adding shape {}", shape_index);
         Handle(AIS_Shape) shape = new AIS_Shape(sh);
         interactive_context->SetAngleAndDeviation(shape, 1 * M_PI / 180, false);
         interactive_context->Display(shape, true);
@@ -196,7 +200,9 @@ void occ_viewer::add_shapes_to_scene()
         interactive_context->Activate(2, true);    // edges
         interactive_context->SetAutomaticHilight(Standard_True);
         interactive_context->SetToHilightSelected(Standard_False);
+        shape_index += 1;
     }
+    LOG_INFO("Added {} shapes to scene", shape_index);
     view->SetProj(V3d_TypeOfOrientation_Zup_Top);
     view->FitAll();
 }

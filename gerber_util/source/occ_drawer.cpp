@@ -112,7 +112,6 @@ namespace gerber_3d
 
     void occ_drawer::set_gerber(gerber *g, int hide_elements)
     {
-        gerber_file = g;
         elements_to_hide = hide_elements;
 
         g->draw(*this, elements_to_hide);
@@ -130,23 +129,28 @@ namespace gerber_3d
             BRepPrimAPI_MakePrism prism(main_face, gp_Vec(0, 0, depth));
             prism.Build();
 
-            TopoDS_Shape main_shape = prism.Shape();
-
-            vout.add_shape(main_shape);
-
-            vout.add_shapes_to_scene();
+            vout.add_shape(prism.Shape());
+            gerber_file = g;
         }
     }
 
     //////////////////////////////////////////////////////////////////////
 
-    void occ_drawer::fill_elements(gerber_draw_element const *elements, size_t num_elements, gerber_polarity polarity, int net_index)
+    void occ_drawer::on_gerber_finished()
+    {
+        vout.add_shapes_to_scene();
+        InvalidateRect(vout.hwnd, nullptr, false);
+    }
+
+    //////////////////////////////////////////////////////////////////////
+
+    void occ_drawer::fill_elements(gerber_draw_element const *elements, size_t num_elements, gerber_polarity polarity)
     {
         LOG_CONTEXT("fill_elements", none);
 
         BRepBuilderAPI_MakeWire wire;
 
-        LOG_DEBUG("FILL: net {}, {} elements, polarity {}", net_index, num_elements, polarity);
+        LOG_DEBUG("FILL: net {}, {} elements, polarity {}", current_net_id, num_elements, polarity);
 
         gp_Ax2 up_axis2;
 

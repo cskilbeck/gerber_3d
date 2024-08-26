@@ -22,7 +22,7 @@ namespace gerber_3d
         gdi_drawer() = default;
 
         void set_gerber(gerber_lib::gerber *g, int hide_elements = gerber_lib::hide_element_none) override;
-        void fill_elements(gerber_lib::gerber_draw_element const *elements, size_t num_elements, gerber_lib::gerber_polarity polarity, int net_index) override;
+        void fill_elements(gerber_lib::gerber_draw_element const *elements, size_t num_elements, gerber_lib::gerber_polarity polarity) override;
 
         using Graphics = Gdiplus::Graphics;
         using GraphicsPath = Gdiplus::GraphicsPath;

@@ -473,7 +473,7 @@ namespace gerber_3d
 
     //////////////////////////////////////////////////////////////////////
 
-    void gdi_drawer::fill_elements(gerber_draw_element const *elements, size_t num_elements, gerber_polarity polarity, int net_index)
+    void gdi_drawer::fill_elements(gerber_draw_element const *elements, size_t num_elements, gerber_polarity polarity)
     {
         LOG_CONTEXT("fill", none);
 
@@ -523,7 +523,7 @@ namespace gerber_3d
             brush = red_fill_brush;
             break;
         }
-        if(highlight_net && net_index == highlight_net_index) {
+        if(highlight_net && current_net_id == highlight_net_index) {
             brush = brush2;
         }
 
