@@ -17,6 +17,7 @@
 #include <BRepBuilderAPI_MakeEdge.hxx>
 #include <BRepBuilderAPI_MakeWire.hxx>
 #include <BRepAlgoAPI_Fuse.hxx>
+#include <ShapeFix_Shape.hxx>
 
 LOG_CONTEXT("OCC", debug);
 
@@ -63,21 +64,20 @@ namespace
 
     void boolean_face(TopoDS_Shape const &tool_face, TopoDS_Shape &final_face, BOPAlgo_Operation operation)
     {
-        ShapeUpgrade_UnifySameDomain unify_tool;
-        unify_tool.Initialize(tool_face);
-        unify_tool.Build();
+        ShapeFix_Shape fixer(tool_face);
+        fixer.Perform();
 
         BOPAlgo_BOP builder;
         builder.SetOperation(operation);
         builder.AddArgument(final_face);
-        builder.AddTool(unify_tool.Shape());
+        builder.AddTool(fixer.Shape());
         builder.Perform();
-        // dump_shape(final_face, 0);
 
         ShapeUpgrade_UnifySameDomain unify_final;
         unify_final.Initialize(builder.Shape());
         unify_final.Build();
         final_face = unify_final.Shape();
+        // dump_shape(final_face, 0);
     }
 
     //////////////////////////////////////////////////////////////////////
