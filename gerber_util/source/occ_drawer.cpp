@@ -63,13 +63,21 @@ namespace
 
     void boolean_face(TopoDS_Shape const &tool_face, TopoDS_Shape &final_face, BOPAlgo_Operation operation)
     {
+        ShapeUpgrade_UnifySameDomain unify_tool;
+        unify_tool.Initialize(tool_face);
+        unify_tool.Build();
+
         BOPAlgo_BOP builder;
         builder.SetOperation(operation);
         builder.AddArgument(final_face);
-        builder.AddTool(tool_face);
+        builder.AddTool(unify_tool.Shape());
         builder.Perform();
-        final_face = builder.Shape();
         // dump_shape(final_face, 0);
+
+        ShapeUpgrade_UnifySameDomain unify_final;
+        unify_final.Initialize(builder.Shape());
+        unify_final.Build();
+        final_face = unify_final.Shape();
     }
 
     //////////////////////////////////////////////////////////////////////
@@ -119,17 +127,27 @@ namespace gerber_3d
         double const depth = 0.5;
         // double const depth = 1.0;
 
+        if(main_face.IsNull()) {
+            main_face = current_face;
+        } else if(!current_face.IsNull()) {
+            // add or remove it to/from main_face
+            if(previous_fill) {
+                add_face(current_face, main_face);
+            } else {
+                remove_face(current_face, main_face);
+            }
+        }
         if(!main_face.IsNull()) {
 
-            ShapeUpgrade_UnifySameDomain unify;
-            unify.Initialize(main_face);
-            unify.Build();
-            main_face = unify.Shape();
+            gerber_timer t;
 
+            LOG_DEBUG("BRepPrimAPI_MakePrism begins");
+            t.reset();
             BRepPrimAPI_MakePrism prism(main_face, gp_Vec(0, 0, depth));
             prism.Build();
 
             vout.add_shape(prism.Shape());
+            LOG_DEBUG("BRepPrimAPI_MakePrism complete, took {:7.2} seconds", t.elapsed_seconds());
             gerber_file = g;
         }
     }
@@ -146,7 +164,7 @@ namespace gerber_3d
 
     void occ_drawer::fill_elements(gerber_draw_element const *elements, size_t num_elements, gerber_polarity polarity)
     {
-        LOG_CONTEXT("fill_elements", none);
+        LOG_CONTEXT("fill_elements", info);
 
         BRepBuilderAPI_MakeWire wire;
 
@@ -181,21 +199,34 @@ namespace gerber_3d
         wire.Build();
         if(wire.IsDone()) {
 
+            // build up a face while the polarity is the same
+
             BRepBuilderAPI_MakeFace wire_face(wire);
-            TopoDS_Face the_face = wire_face.Face();
+            TopoDS_Face new_face = wire_face.Face();
 
-            switch(polarity) {
+            current_fill = polarity == polarity_dark || polarity == polarity_positive;
 
-            case polarity_negative:
-            case polarity_clear:
-                remove_face(the_face, main_face);
-                break;
+            if(current_face.IsNull()) {
+                current_face = new_face;
 
-            case polarity_dark:
-            case polarity_positive:
-                add_face(the_face, main_face);
-                break;
+            } else if(current_fill != previous_fill) {
+
+                // add or remove it to/from main_face
+                if(previous_fill) {
+                    if(main_face.IsNull()) {
+                        main_face = current_face;
+                    } else {
+                        add_face(current_face, main_face);
+                    }
+                } else {
+                    remove_face(current_face, main_face);
+                }
+                // now the current face is what we just filled
+                current_face = new_face;
+            } else {
+                add_face(new_face, current_face);
             }
+            previous_fill = current_fill;
         }
     }
 

@@ -30,6 +30,10 @@ namespace gerber_3d
         occ_viewer vout{};
 
         TopoDS_Shape main_face{};
+        TopoDS_Shape current_face{};
+
+        bool previous_fill{ false };
+        bool current_fill{ false };
 
         gerber_lib::gerber *gerber_file{ nullptr };
     };
