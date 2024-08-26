@@ -8,22 +8,15 @@
 #include <gp_Pln.hxx>
 #include <gp_Circ.hxx>
 #include <TopoDS.hxx>
-#include <TopoDS_Solid.hxx>
 #include <BRepTools.hxx>
 #include <BRepBuilderAPI_MakeFace.hxx>
-#include <BRepBuilderAPI_MakePolygon.hxx>
-#include <BRepOffsetAPI_MakeOffset.hxx>
-#include <BRepPrimAPI_MakeBox.hxx>
 #include <BRepPrimAPI_MakePrism.hxx>
 #include <ShapeUpgrade_UnifySameDomain.hxx>
-#include <BOPAlgo_Builder.hxx>
 #include <BOPAlgo_BOP.hxx>
 #include <TopExp_Explorer.hxx>
 #include <BRepBuilderAPI_MakeEdge.hxx>
 #include <BRepBuilderAPI_MakeWire.hxx>
-#include <BRepFeat_Builder.hxx>
-#include <ShapeFix_Solid.hxx>
-#include <ShapeFix_Face.hxx>
+#include <BRepAlgoAPI_Fuse.hxx>
 
 LOG_CONTEXT("OCC", debug);
 
@@ -70,20 +63,12 @@ namespace
 
     void boolean_face(TopoDS_Shape const &tool_face, TopoDS_Shape &final_face, BOPAlgo_Operation operation)
     {
-        // BRepFeat_Builder b;
-        // b.Init(final_face, tool_face);
-        // b.SetOperation(operation == BOPAlgo_CUT ? 0 : 1);
-        // b.Perform();
-        // final_face = b.Shape();
-
         BOPAlgo_BOP builder;
         builder.SetOperation(operation);
         builder.AddArgument(final_face);
         builder.AddTool(tool_face);
         builder.Perform();
-
         final_face = builder.Shape();
-
         // dump_shape(final_face, 0);
     }
 
@@ -132,7 +117,7 @@ namespace gerber_3d
 
         g->draw(*this, elements_to_hide);
 
-        double const depth = 0.25;
+        double const depth = 0.5;
         // double const depth = 1.0;
 
         if(!main_face.IsNull()) {
@@ -182,15 +167,18 @@ namespace gerber_3d
             case draw_element_arc: {
                 double start = deg_2_rad(e.start_degrees);
                 double end = deg_2_rad(e.end_degrees);
-                up_axis2.SetLocation(gp_Pnt(e.arc_center.x, e.arc_center.y, 0));
-                wire.Add(BRepBuilderAPI_MakeEdge(gp_Circ(up_axis2, e.radius), start, end));
+                gp_Circ circle;
+                circle.SetLocation(gp_Pnt(e.arc_center.x, e.arc_center.y, 0));
+                circle.SetRadius(e.radius);
+                wire.Add(BRepBuilderAPI_MakeEdge(circle, start, end));
             } break;
             }
         }
         wire.Build();
         if(wire.IsDone()) {
-            BRepBuilderAPI_MakeFace face(wire);
-            TopoDS_Shape the_face = face.Face();
+
+            BRepBuilderAPI_MakeFace wire_face(wire);
+            TopoDS_Face the_face = wire_face.Face();
 
             switch(polarity) {
 
