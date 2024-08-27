@@ -16,6 +16,7 @@
 #include "gerber_image.h"
 #include "gerber_state.h"
 #include "gerber_level.h"
+#include "gerber_entity.h"
 #include "gerber_reader.h"
 #include "gerber_draw.h"
 #include "gerber_arc.h"
@@ -66,14 +67,14 @@ namespace gerber_lib
 
         gerber_error_code parse_file(char const *file_path);
 
-        gerber_error_code draw(gerber_draw_interface &drawer, int const hide_elements, int start_net_index = 0, int end_net_index = 0) const;
+        gerber_error_code draw(gerber_draw_interface &drawer, int const hide_elements) const;
         gerber_error_code fill_region_path(gerber_draw_interface &drawer, size_t net_index, gerber_polarity polarity) const;
-        gerber_error_code draw_linear_track(gerber_draw_interface &drawer, vec2d start, vec2d end, double width, gerber_polarity polarity) const;
+        gerber_error_code draw_linear_track(gerber_draw_interface &drawer, gerber_net *n, double width, gerber_polarity polarity) const;
         gerber_error_code fill_polygon(gerber_draw_interface &drawer, double diameter, int num_sides, double angle_degrees) const;
         gerber_error_code draw_macro(gerber_draw_interface &drawer, gerber_net *current_net, gerber_aperture *const macro_aperture) const;
-        gerber_error_code draw_capsule(gerber_draw_interface &drawer, vec2d const &center, double width, double height, gerber_polarity polarity) const;
-        gerber_error_code draw_arc(gerber_draw_interface &drawer, gerber_arc const &arc, double thickness, gerber_polarity polarity) const;
-        gerber_error_code draw_circle(gerber_draw_interface &drawer, vec2d const &pos, double radius, gerber_polarity polarity) const;
+        gerber_error_code draw_capsule(gerber_draw_interface &drawer, gerber_net *net, double width, double height, gerber_polarity polarity) const;
+        gerber_error_code draw_arc(gerber_draw_interface &drawer, gerber_net *net, double thickness, gerber_polarity polarity) const;
+        gerber_error_code draw_circle(gerber_draw_interface &drawer, gerber_net *n, double radius, gerber_polarity polarity) const;
 
         gerber_error_code parse_gerber_segment(gerber_net *net);
 
@@ -92,6 +93,8 @@ namespace gerber_lib
         gerber_image image{};
         gerber_state state{};
         gerber_reader reader{};
+
+        std::vector<gerber_entity> entities;
 
         gerber() = default;
     };

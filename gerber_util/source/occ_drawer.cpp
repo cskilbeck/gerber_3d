@@ -162,13 +162,13 @@ namespace gerber_3d
 
     //////////////////////////////////////////////////////////////////////
 
-    void occ_drawer::fill_elements(gerber_draw_element const *elements, size_t num_elements, gerber_polarity polarity)
+    void occ_drawer::fill_elements(gerber_draw_element const *elements, size_t num_elements, gerber_polarity polarity, int entity_id)
     {
         LOG_CONTEXT("fill_elements", info);
 
         BRepBuilderAPI_MakeWire wire;
 
-        LOG_DEBUG("FILL: net {}, {} elements, polarity {}", current_net_id, num_elements, polarity);
+        LOG_DEBUG("FILL: entity {}, {} elements, polarity {}", entity_id, num_elements, polarity);
 
         gp_Ax2 up_axis2;
 

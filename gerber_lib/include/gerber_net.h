@@ -45,7 +45,7 @@ namespace gerber_lib
         gerber_arc circle_segment{};
         std::string label;
         bool hidden{false};
-        int line_number{};
+        int entity_id{0};
 
         // these are borrowed...
         gerber_level *level{ nullptr };

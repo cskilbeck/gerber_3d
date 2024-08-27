@@ -54,7 +54,6 @@ namespace gerber_lib
 
     gerber_net::gerber_net(gerber_image *img) : gerber_net()
     {
-        line_number = 0;
         level = new gerber_level(img);
         net_state = new gerber_net_state(img);
         img->nets.push_back(this);
@@ -64,8 +63,6 @@ namespace gerber_lib
 
     gerber_net::gerber_net(gerber_image *img, gerber_net *cur_net, gerber_level *lvl, gerber_net_state *state) : gerber_net()
     {
-        line_number = 0;
-
         if(lvl != nullptr) {
             level = lvl;
         } else {

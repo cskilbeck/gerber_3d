@@ -22,7 +22,7 @@ namespace gerber_3d
         gdi_drawer() = default;
 
         void set_gerber(gerber_lib::gerber *g, int hide_elements = gerber_lib::hide_element_none) override;
-        void fill_elements(gerber_lib::gerber_draw_element const *elements, size_t num_elements, gerber_lib::gerber_polarity polarity) override;
+        void fill_elements(gerber_lib::gerber_draw_element const *elements, size_t num_elements, gerber_lib::gerber_polarity polarity, int entity_id) override;
 
         using Graphics = Gdiplus::Graphics;
         using GraphicsPath = Gdiplus::GraphicsPath;
@@ -73,8 +73,8 @@ namespace gerber_3d
 
         int elements_to_hide{ 0 };
 
-        int highlight_net_index{ 1 };
-        bool highlight_net{ false };
+        int highlight_entity_id{ 1 };
+        bool highlight_entity{ false };
 
         static Color const axes_color;
         static Color const origin_color;
@@ -116,6 +116,24 @@ namespace gerber_3d
         void release_gdi_resources();
 
         void cleanup();
+
+        struct gdi_entity
+        {
+            int path_id;
+            int num_paths;
+            bool fill;
+
+            gdi_entity() = default;
+
+            gdi_entity(int path_id, int num_paths, bool fill) : path_id(path_id), num_paths(num_paths), fill(fill)
+            {
+            }
+        };
+
+        std::vector<GraphicsPath *> gdi_paths;
+        std::vector<gdi_entity> gdi_entities;
+
+        void draw_all_paths();
 
         void create_window(int x, int y, int w, int h);
         void paint(HDC hdc);

@@ -81,6 +81,12 @@ namespace gerber_3d
         gerber_file = g;
         set_default_zoom();
         elements_to_hide = hide_elements;
+        while(!gdi_paths.empty()) {
+            delete gdi_paths.back();
+            gdi_paths.pop_back();
+        }
+        gdi_entities.clear();
+        gerber_file->draw(*this, elements_to_hide);
         redraw();
     }
 
@@ -166,10 +172,10 @@ namespace gerber_3d
                 break;
 
             case 'D':
-                if(gerber_file != nullptr && highlight_net) {
+                if(gerber_file != nullptr && highlight_entity) {
                     log_drawer logger;
                     logger.set_gerber(gerber_file);
-                    gerber_file->draw(logger, elements_to_hide, highlight_net_index, highlight_net_index);
+                    gerber_file->draw(logger, elements_to_hide);
                 }
                 break;
 
@@ -205,20 +211,20 @@ namespace gerber_3d
                 break;
 
             case 'N':
-                highlight_net = !highlight_net;
+                highlight_entity = !highlight_entity;
                 redraw();
                 break;
 
             case VK_LEFT:
-                if(highlight_net) {
-                    highlight_net_index = std::max(1, highlight_net_index - 1);
+                if(highlight_entity) {
+                    highlight_entity_id = std::max(1, highlight_entity_id - 1);
                     redraw();
                 }
                 break;
 
             case VK_RIGHT:
-                if(highlight_net) {
-                    highlight_net_index = std::min((int)gerber_file->image.nets.size() - 1, highlight_net_index + 1);
+                if(highlight_entity) {
+                    highlight_entity_id = std::min((int)gdi_entities.size(), highlight_entity_id + 1);
                     redraw();
                 }
                 break;
@@ -472,15 +478,20 @@ namespace gerber_3d
     }
 
     //////////////////////////////////////////////////////////////////////
+    // entity_id is guaranteed to increase monotonically
 
-    void gdi_drawer::fill_elements(gerber_draw_element const *elements, size_t num_elements, gerber_polarity polarity)
+    void gdi_drawer::fill_elements(gerber_draw_element const *elements, size_t num_elements, gerber_polarity polarity, int entity_id)
     {
-        LOG_CONTEXT("fill", none);
+        entity_id -= 1;
+        if((int)gdi_entities.size() <= entity_id) {
+            bool fill = polarity == polarity_dark || polarity == polarity_positive;
+            gdi_entities.emplace_back((int)gdi_paths.size(), 1, fill);
+        } else {
+            gdi_entities[entity_id].num_paths += 1;
+        }
 
-        GraphicsPath p;
-
-        size_t lines = 0;
-        size_t arcs = 0;
+        GraphicsPath *p = new GraphicsPath();
+        gdi_paths.push_back(p);
 
         for(size_t n = 0; n < num_elements; ++n) {
 
@@ -489,48 +500,14 @@ namespace gerber_3d
             switch(elements[n].draw_element_type) {
 
             case draw_element_arc: {
-                p.AddArc((REAL)(e.arc_center.x - e.radius), (REAL)(e.arc_center.y - e.radius), (REAL)e.radius * 2, (REAL)e.radius * 2, (REAL)e.start_degrees,
-                         (REAL)(e.end_degrees - e.start_degrees));
-                arcs += 1;
+                p->AddArc((REAL)(e.arc_center.x - e.radius), (REAL)(e.arc_center.y - e.radius), (REAL)e.radius * 2, (REAL)e.radius * 2, (REAL)e.start_degrees,
+                          (REAL)(e.end_degrees - e.start_degrees));
             } break;
 
             case draw_element_line: {
-                p.AddLine((REAL)e.line_start.x, (REAL)e.line_start.y, (REAL)e.line_end.x, (REAL)e.line_end.y);
-                lines += 1;
+                p->AddLine((REAL)e.line_start.x, (REAL)e.line_start.y, (REAL)e.line_end.x, (REAL)e.line_end.y);
             } break;
             }
-        }
-        LOG_DEBUG("FILL: polarity {}, {} elements, {} lines, {} arcs", polarity, num_elements, lines, arcs);
-
-        Brush *brush{ nullptr };
-        Brush *brush2{ nullptr };
-
-        switch(polarity) {
-
-        case polarity_dark:
-        case polarity_positive:
-            brush = fill_brush[solid_color_index];
-            brush2 = highlight_fill_brush;
-            break;
-
-        case polarity_clear:
-        case polarity_negative:
-            brush = clear_brush;
-            brush2 = highlight_clear_brush;
-            break;
-
-        default:
-            brush = red_fill_brush;
-            break;
-        }
-        if(highlight_net && current_net_id == highlight_net_index) {
-            brush = brush2;
-        }
-
-        if(current_draw_mode == draw_mode_shaded) {
-            graphics->FillPath(brush, &p);
-        } else {
-            graphics->DrawPath(axes_pen, &p);
         }
     }
 
@@ -611,6 +588,43 @@ namespace gerber_3d
 
     //////////////////////////////////////////////////////////////////////
 
+    void gdi_drawer::draw_all_paths()
+    {
+        int entity_id = 1;
+        for(auto const &entity : gdi_entities) {
+
+            int path_id = entity.path_id;
+            int last_path = entity.num_paths + path_id;
+
+            Brush *brush{ nullptr };
+            Brush *brush2{ nullptr };
+
+            if(entity.fill) {
+                brush = fill_brush[solid_color_index];
+                brush2 = highlight_fill_brush;
+            } else {
+                brush = clear_brush;
+                brush2 = highlight_clear_brush;
+            }
+
+            if(highlight_entity && entity_id == highlight_entity_id) {
+                brush = brush2;
+            }
+            for(; path_id != last_path; ++path_id) {
+
+                GraphicsPath *path = gdi_paths[path_id];
+                if(current_draw_mode == draw_mode_shaded) {
+                    graphics->FillPath(brush, path);
+                } else {
+                    graphics->DrawPath(axes_pen, path);
+                }
+            }
+            entity_id += 1;
+        }
+    }
+
+    //////////////////////////////////////////////////////////////////////
+
     void gdi_drawer::paint(HDC hdc)
     {
         LOG_CONTEXT("paint", debug);
@@ -654,12 +668,16 @@ namespace gerber_3d
 
         // draw the whole thing
         current_draw_mode = draw_mode;
-        gerber_file->draw(*this, elements_to_hide);
+
+        draw_all_paths();
+
+        // gerber_file->draw(*this, elements_to_hide);
 
         // draw just the highlighted net (if there is one)
-        if(highlight_net) {
+        if(highlight_entity) {
             current_draw_mode = draw_mode_shaded;
-            gerber_file->draw(*this, elements_to_hide, highlight_net_index, highlight_net_index);
+            draw_all_paths();
+            // gerber_file->draw(*this, elements_to_hide, highlight_entity_id, highlight_entity);
         }
 
         graphics->SetSmoothingMode(Gdiplus::SmoothingModeNone);
@@ -704,11 +722,18 @@ namespace gerber_3d
                                     (INT)height(drag_rect) - 1);
         }
 
-        if(highlight_net && highlight_net_index < gerber_file->image.nets.size()) {
+        if(highlight_entity) {
 
-            gerber_net *n = gerber_file->image.nets[highlight_net_index];
+            gerber_entity &entity = gerber_file->entities[highlight_entity_id - 1];
 
-            std::wstring text = std::format(L"NET {:4d} LINE {:5d}", highlight_net_index, n->line_number);
+            std::wstring line;
+            if(entity.line_number_begin != entity.line_number_end) {
+                line = std::format(L"Lines {} to {}", entity.line_number_begin, entity.line_number_end);
+            } else {
+                line = std::format(L"Line {}", entity.line_number_begin);
+            }
+
+            std::wstring text = std::format(L"Entity {:4d} {}", highlight_entity_id, line);
 
             PointF origin{ 10, 10 };
             RectF bounding_box;
