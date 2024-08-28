@@ -1,11 +1,16 @@
 #pragma once
 
 #include <iostream>
+#include <string>
+#include <locale>
+#include <codecvt>
 #include <map>
 #include <chrono>
 
 namespace gerber_lib
 {
+    //////////////////////////////////////////////////////////////////////
+
     struct gerber_timer
     {
         gerber_timer() = default;
@@ -25,6 +30,10 @@ namespace gerber_lib
             return microseconds.count() / 1000000.0;
         }
     };
+
+    //////////////////////////////////////////////////////////////////////
+
+    std::wstring utf16_from_utf8(std::string const &s);
 
     //////////////////////////////////////////////////////////////////////
 
