@@ -124,8 +124,7 @@ namespace gerber_3d
 
         g->draw(*this, elements_to_hide);
 
-        double const depth = 0.5;
-        // double const depth = 1.0;
+        // deal with the last current_face which might be dangling
 
         if(main_face.IsNull()) {
             main_face = current_face;
@@ -138,6 +137,9 @@ namespace gerber_3d
             }
         }
         if(!main_face.IsNull()) {
+
+            double const depth = 0.5;
+            // double const depth = 1.0;
 
             gerber_timer t;
 

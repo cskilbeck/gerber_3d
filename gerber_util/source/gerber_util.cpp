@@ -9,7 +9,7 @@
 #include "gdi_drawer.h"
 #include "occ_drawer.h"
 
-// #define SHOW_3D
+//#define SHOW_3D
 #define SHOW_GDI
 
 //////////////////////////////////////////////////////////////////////

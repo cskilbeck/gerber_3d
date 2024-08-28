@@ -42,12 +42,13 @@ namespace gerber_3d
 
         enum gdi_draw_mode
         {
-            draw_mode_shaded,
-            draw_mode_wireframe
+            draw_mode_none = 0,
+            draw_mode_shaded = 1,
+            draw_mode_wireframe = 2,
+            draw_mode_both = 3
         };
 
-        gdi_draw_mode draw_mode{ draw_mode_shaded };
-        gdi_draw_mode current_draw_mode{ draw_mode_shaded };
+        int draw_mode{ draw_mode_shaded };
 
         enum mouse_drag_action
         {
@@ -140,7 +141,9 @@ namespace gerber_3d
 
         void on_left_click(POINT const &mouse_pos);
 
-        void draw_all_paths();
+        void draw_all_entities();
+
+        void draw_entity(gdi_entity const &entity, Brush *brush, Pen *pen);
 
         void create_window(int x, int y, int w, int h);
         void paint(HDC hdc);

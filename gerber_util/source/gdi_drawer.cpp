@@ -251,10 +251,17 @@ namespace gerber_3d
             switch(LOWORD(wParam)) {
 
             case 'W':
-                if(draw_mode == draw_mode_shaded) {
-                    draw_mode = draw_mode_wireframe;
-                } else {
+                draw_mode ^= (int)draw_mode_wireframe;
+                if(draw_mode == 0) {
                     draw_mode = draw_mode_shaded;
+                }
+                redraw();
+                break;
+
+            case 'S':
+                draw_mode ^= (int)draw_mode_shaded;
+                if(draw_mode == 0) {
+                    draw_mode = draw_mode_wireframe;
                 }
                 redraw();
                 break;
@@ -684,38 +691,42 @@ namespace gerber_3d
 
     //////////////////////////////////////////////////////////////////////
 
-    void gdi_drawer::draw_all_paths()
+    void gdi_drawer::draw_entity(gdi_entity const &entity, Brush *brush, Pen *pen)
     {
-        int entity_id = 1;
+        int path_id = entity.path_id;
+        int last_path = entity.num_paths + path_id;
+        for(; path_id != last_path; ++path_id) {
+
+            GraphicsPath *path = gdi_paths[path_id];
+            if(brush != nullptr) {
+                graphics->FillPath(brush, path);
+            }
+            if(pen != nullptr != 0) {
+                graphics->DrawPath(pen, path);
+            }
+        }
+    }
+
+    //////////////////////////////////////////////////////////////////////
+
+    void gdi_drawer::draw_all_entities()
+    {
         for(auto const &entity : gdi_entities) {
 
-            int path_id = entity.path_id;
-            int last_path = entity.num_paths + path_id;
-
             Brush *brush{ nullptr };
-            Brush *brush2{ nullptr };
-
-            if(entity.fill) {
-                brush = fill_brush[solid_color_index];
-                brush2 = highlight_fill_brush;
-            } else {
-                brush = clear_brush;
-                brush2 = highlight_clear_brush;
-            }
-
-            if(highlight_entity && entity_id == highlight_entity_id) {
-                brush = brush2;
-            }
-            for(; path_id != last_path; ++path_id) {
-
-                GraphicsPath *path = gdi_paths[path_id];
-                if(current_draw_mode == draw_mode_shaded) {
-                    graphics->FillPath(brush, path);
+            if((draw_mode & draw_mode_shaded) != 0) {
+                if(entity.fill) {
+                    brush = fill_brush[solid_color_index];
                 } else {
-                    graphics->DrawPath(axes_pen, path);
+                    brush = clear_brush;
                 }
             }
-            entity_id += 1;
+
+            Pen *pen{ nullptr };
+            if((draw_mode & draw_mode_wireframe) != 0) {
+                pen = axes_pen;
+            }
+            draw_entity(entity, brush, pen);
         }
     }
 
@@ -771,17 +782,19 @@ namespace gerber_3d
         graphics->SetSmoothingMode(Gdiplus::SmoothingModeHighQuality);
 
         // draw the whole thing
-        current_draw_mode = draw_mode;
 
-        draw_all_paths();
+        draw_all_entities();
 
         // gerber_file->draw(*this, elements_to_hide);
 
         // draw just the highlighted net (if there is one)
         if(highlight_entity) {
-            current_draw_mode = draw_mode_shaded;
-            draw_all_paths();
-            // gerber_file->draw(*this, elements_to_hide, highlight_entity_id, highlight_entity);
+            gdi_entity const &highlighted_entity = gdi_entities[highlight_entity_id - 1llu];
+            Brush *highlight_brush = highlight_clear_brush;
+            if(highlighted_entity.fill) {
+                highlight_brush = highlight_fill_brush;
+            }
+            draw_entity(highlighted_entity, highlight_brush, axes_pen);
         }
 
         graphics->SetSmoothingMode(Gdiplus::SmoothingModeNone);
