@@ -1169,7 +1169,6 @@ namespace gerber_lib
                 default:
                     return stats.error(reader, error_invalid_step_and_repeat, "expected [X|Y|I|J], got {}", string_from_char(c));
                 }
-                break;
                 CHECK(reader.read_char(&c));
             }
             LOG_DEBUG("Step and repeat: POS: {},{}, DISTANCE: {},{}", state.level->step_and_repeat.pos.x, state.level->step_and_repeat.pos.y,
