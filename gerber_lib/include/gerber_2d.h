@@ -168,6 +168,7 @@ namespace gerber_lib
         matrix make_rotation(double angle_degrees);
         matrix make_scale(vec2d const &scale);
         matrix make_rotate_around(double angle_degrees, vec2d const &pos);
+        matrix invert_matrix(matrix const &m);
         vec2d transform_point(matrix const &m, vec2d const &p);
 
         //////////////////////////////////////////////////////////////////////

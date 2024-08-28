@@ -133,6 +133,13 @@ namespace gerber_3d
         std::vector<GraphicsPath *> gdi_paths;
         std::vector<gdi_entity> gdi_entities;
 
+        std::vector<int> entities_clicked;
+        size_t selected_entity_index;
+
+        gerber_lib::gerber_2d::matrix get_transform_matrix();
+
+        void on_left_click(POINT const &mouse_pos);
+
         void draw_all_paths();
 
         void create_window(int x, int y, int w, int h);

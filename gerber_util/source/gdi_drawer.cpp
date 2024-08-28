@@ -22,6 +22,10 @@ namespace
 
     Color const debug_color{ 255, 0, 0, 0 };
 
+    POINT get_mouse_pos(LPARAM lParam)
+    {
+        return POINT{ GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
+    }
 };    // namespace
 
 namespace gerber_3d
@@ -129,6 +133,90 @@ namespace gerber_3d
         relative_mouse_pos = relative_mouse_pos.multiply(image_size_px);
         image_pos_px = { mouse_pos.x - relative_mouse_pos.x, mouse_pos.y - relative_mouse_pos.y };
         redraw();
+    }
+
+    //////////////////////////////////////////////////////////////////////
+
+    void gdi_drawer::on_left_click(POINT const &mouse_pos)
+    {
+        LOG_CONTEXT("pick", info);
+
+        if(gerber_file == nullptr) {
+            return;
+        }
+
+        // Get click position in world coordinates
+        vec2d pos{ (double)mouse_pos.x, (double)mouse_pos.y };
+        matrix transform = get_transform_matrix();
+        vec2d img{ pos.x, pos.y, invert_matrix(transform) };
+
+        // Scale the transform because the default pen width is 1.0 which is a whole mm
+        // With scale(100,100), picking accuracy is 10 microns.
+        // Note the gdi_point will also get scaled by the transform so no need to scale the input point
+        Matrix m;
+        m.Scale(100, 100);
+        graphics->SetTransform(&m);
+
+        // Build list of entities under that point
+        std::vector<int> entities;
+        int entity_id = 1;
+
+        PointF gdi_point((REAL)img.x, (REAL)img.y);
+
+        for(auto const &entity : gdi_entities) {
+
+            int path_id = entity.path_id;
+
+            for(int n = 0; n < entity.num_paths; ++n) {
+
+                GraphicsPath *path = gdi_paths[path_id];
+
+                if(path->IsVisible(gdi_point, graphics)) {
+                    LOG_DEBUG("ENTITY {} is visible via PATH {}", entity_id, path_id);
+                    entities.push_back(entity_id);
+                    break;
+                }
+                path_id += 1;
+            }
+            entity_id += 1;
+        }
+
+        // Clicked on nothing?
+        if(entities.empty()) {
+            LOG_DEBUG("No entites found at {},{}", mouse_pos.x, mouse_pos.y);
+            highlight_entity = false;
+            return;
+        }
+
+        // Clicked on the same set of entities?
+        bool same{ false };
+        if(entities.size() == entities_clicked.size()) {
+            bool different{ false };
+            for(size_t i = 0; i < entities.size(); ++i) {
+                if(entities[i] != entities_clicked[i]) {
+                    different = true;
+                    break;
+                }
+            }
+            same = !different;
+        }
+
+        // Different set, reset the cycling index
+        if(!same) {
+            entities_clicked = entities;
+            selected_entity_index = entities_clicked.size() - 1;
+            highlight_entity = true;
+            highlight_entity_id = entities_clicked[selected_entity_index];
+        } else {
+            // Same set, cycle to the next entity
+            if(selected_entity_index != 0) {
+                selected_entity_index -= 1;
+            } else {
+                selected_entity_index = entities_clicked.size() - 1;
+            }
+            highlight_entity = true;
+            highlight_entity_id = entities_clicked[selected_entity_index];
+        }
     }
 
     //////////////////////////////////////////////////////////////////////
@@ -247,19 +335,24 @@ namespace gerber_3d
 
         case WM_MOUSEWHEEL: {
             double scale_factor = ((int16_t)(HIWORD(wParam)) > 0) ? 1.1 : 0.9;
-            POINT pos{ GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
-            ScreenToClient(hwnd, &pos);
-            zoom_image(pos, scale_factor);
+            POINT mouse_pos = get_mouse_pos(lParam);
+            ScreenToClient(hwnd, &mouse_pos);
+            zoom_image(mouse_pos, scale_factor);
         } break;
 
             //////////////////////////////////////////////////////////////////////
 
-        case WM_LBUTTONDOWN:
-            mouse_drag = mouse_drag_select;
-            drag_mouse_start_pos = POINT{ GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
-            drag_rect = {};
-            SetCapture(hwnd);
-            break;
+        case WM_LBUTTONDOWN: {
+            POINT mouse_pos = get_mouse_pos(lParam);
+            if((GetKeyState(VK_CONTROL) & 0x8000) != 0) {
+                mouse_drag = mouse_drag_select;
+                drag_mouse_start_pos = mouse_pos;
+                drag_rect = {};
+                SetCapture(hwnd);
+            } else {
+                on_left_click(mouse_pos);
+            }
+        } break;
 
             //////////////////////////////////////////////////////////////////////
 
@@ -314,7 +407,7 @@ namespace gerber_3d
 
         case WM_MBUTTONDOWN:
             mouse_drag = mouse_drag_zoom;
-            drag_mouse_cur_pos = POINT{ GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
+            drag_mouse_cur_pos = get_mouse_pos(lParam);
             drag_mouse_start_pos = drag_mouse_cur_pos;
             SetCapture(hwnd);
             break;
@@ -331,7 +424,7 @@ namespace gerber_3d
 
         case WM_RBUTTONDOWN:
             mouse_drag = mouse_drag_pan;
-            drag_mouse_cur_pos = POINT{ GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
+            drag_mouse_cur_pos = get_mouse_pos(lParam);
             SetCapture(hwnd);
             break;
 
@@ -350,23 +443,25 @@ namespace gerber_3d
             switch(mouse_drag) {
 
             case mouse_drag_pan: {
-                POINT mouse_pos{ GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
-                image_pos_px = image_pos_px.add({ (double)(mouse_pos.x - drag_mouse_cur_pos.x), (double)-(mouse_pos.y - drag_mouse_cur_pos.y) });
+                POINT mouse_pos = get_mouse_pos(lParam);
+                double dx = (double)(mouse_pos.x - drag_mouse_cur_pos.x);
+                double dy = (double)(mouse_pos.y - drag_mouse_cur_pos.y);
+                image_pos_px = image_pos_px.add({ dx, -dy });
                 drag_mouse_cur_pos = mouse_pos;
                 redraw();
             } break;
 
             case mouse_drag_zoom: {
-                POINT mouse_pos{ GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
-                double x = (double)(mouse_pos.x - drag_mouse_cur_pos.x);
-                double y = (double)(mouse_pos.y - drag_mouse_cur_pos.y);
-                zoom_image(drag_mouse_start_pos, 1.0 + (x - y) * 0.01);
+                POINT mouse_pos = get_mouse_pos(lParam);
+                double dx = (double)(mouse_pos.x - drag_mouse_cur_pos.x);
+                double dy = (double)(mouse_pos.y - drag_mouse_cur_pos.y);
+                zoom_image(drag_mouse_start_pos, 1.0 + (dx - dy) * 0.01);
                 drag_mouse_cur_pos = mouse_pos;
                 redraw();
             } break;
 
             case mouse_drag_select: {
-                drag_mouse_cur_pos = POINT{ GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
+                drag_mouse_cur_pos = get_mouse_pos(lParam);
 
                 if(drag_mouse_cur_pos.x != drag_mouse_start_pos.x && drag_mouse_cur_pos.y != drag_mouse_start_pos.y) {
 
@@ -509,6 +604,7 @@ namespace gerber_3d
             } break;
             }
         }
+        p->CloseAllFigures();
     }
 
     //////////////////////////////////////////////////////////////////////
@@ -625,6 +721,31 @@ namespace gerber_3d
 
     //////////////////////////////////////////////////////////////////////
 
+    matrix gdi_drawer::get_transform_matrix()
+    {
+        if(gerber_file == nullptr) {
+            return make_identity();
+        }
+        rect const &gerber_rect = gerber_file->image.info.extent;
+        double gerber_width = width(gerber_rect);
+        double gerber_height = height(gerber_rect);
+        vec2d scale{ image_size_px.x / gerber_width, image_size_px.y / gerber_height };
+
+#if 0
+        // upside down (not flipped)
+        matrix mat = make_translation({ -gerber_rect.min_pos.x, -gerber_rect.min_pos.y });
+        mat = matrix_multiply(mat, make_scale({ scale.x, scale.y }));
+        return matrix_multiply(mat, make_translation({ image_pos_px.x, image_pos_px.y }));
+#else
+        // right way up (vertically flipped)
+        matrix mat = make_translation({ -gerber_rect.min_pos.x, -gerber_rect.min_pos.y });
+        mat = matrix_multiply(mat, make_scale({ scale.x, -scale.y }));
+        return matrix_multiply(mat, make_translation({ image_pos_px.x, window_size.y - image_pos_px.y }));
+#endif
+    }
+
+    //////////////////////////////////////////////////////////////////////
+
     void gdi_drawer::paint(HDC hdc)
     {
         LOG_CONTEXT("paint", debug);
@@ -642,24 +763,7 @@ namespace gerber_3d
 
         graphics->FillRectangle(clear_brush, 0, 0, (INT)window_size.x, (INT)window_size.y);
 
-        rect const &gerber_rect = gerber_file->image.info.extent;
-
-        double gerber_width = width(gerber_rect);
-        double gerber_height = height(gerber_rect);
-
-        vec2d scale{ image_size_px.x / gerber_width, image_size_px.y / gerber_height };
-
-#if 0
-        // upside down (not flipped)
-        matrix mat = make_translation({ -gerber_rect.min_pos.x, -gerber_rect.min_pos.y });
-        mat = matrix_multiply(mat, make_scale({ scale.x, scale.y }));
-        mat = matrix_multiply(mat, make_translation({ image_pos_px.x, image_pos_px.y }));
-#else
-        // right way up (vertically flipped)
-        matrix mat = make_translation({ -gerber_rect.min_pos.x, -gerber_rect.min_pos.y });
-        mat = matrix_multiply(mat, make_scale({ scale.x, -scale.y }));
-        mat = matrix_multiply(mat, make_translation({ image_pos_px.x, window_size.y - image_pos_px.y }));
-#endif
+        matrix mat = get_transform_matrix();
 
         Matrix gdi_matrix((REAL)mat.A, (REAL)mat.B, (REAL)mat.C, (REAL)mat.D, (REAL)mat.X, (REAL)mat.Y);
         graphics->SetTransform(&gdi_matrix);
@@ -683,6 +787,10 @@ namespace gerber_3d
         graphics->SetSmoothingMode(Gdiplus::SmoothingModeNone);
 
         if(show_extent) {
+            rect const &gerber_rect = gerber_file->image.info.extent;
+            double gerber_width = width(gerber_rect);
+            double gerber_height = height(gerber_rect);
+
             // transform is still active so extent is just the gerber rect
             REAL x = (REAL)gerber_rect.min_pos.x;
             REAL y = (REAL)gerber_rect.min_pos.y;

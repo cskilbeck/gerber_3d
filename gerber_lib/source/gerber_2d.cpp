@@ -74,6 +74,20 @@ namespace gerber_lib
 
         //////////////////////////////////////////////////////////////////////
 
+        matrix invert_matrix(matrix const &m)
+        {
+            double det = m.A * m.D - m.B * m.C;
+
+            // Check for singular matrix
+            if(det == 0) {
+                return make_identity();
+            }
+
+            return matrix(m.D / det, -m.B / det, -m.C / det, m.A / det, (m.B * m.Y - m.D * m.X) / det, (m.C * m.X - m.A * m.Y) / det);
+        }
+
+        //////////////////////////////////////////////////////////////////////
+
         vec2d transform_point(matrix const &m, vec2d const &p)
         {
             return vec2d(p.x, p.y, m);
