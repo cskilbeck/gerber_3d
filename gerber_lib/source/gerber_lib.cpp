@@ -507,9 +507,9 @@ namespace gerber_lib
                 }
             });
 
-            int aperture_number;
+            if(parse_aperture_definition(aperture, &image, unit_scale) == ok) {
 
-            if(parse_aperture_definition(aperture, &image, unit_scale, &aperture_number) == ok) {
+                int aperture_number = aperture->aperture_number;
 
                 if(aperture_number >= 0 && aperture_number <= max_num_apertures) {
 
@@ -1266,7 +1266,7 @@ namespace gerber_lib
 
     //////////////////////////////////////////////////////////////////////
 
-    gerber_error_code gerber::parse_aperture_definition(gerber_aperture *aperture, gerber_image *cur_image, double unit_scale, int *aperture_number)
+    gerber_error_code gerber::parse_aperture_definition(gerber_aperture *aperture, gerber_image *cur_image, double unit_scale)
     {
         LOG_CONTEXT("parse_aperture", debug);
 
@@ -1371,7 +1371,7 @@ namespace gerber_lib
         default:
             break;
         }
-        *aperture_number = aperture_id;
+        aperture->aperture_number = aperture_id;
         return ok;
     }
 
@@ -1577,7 +1577,7 @@ namespace gerber_lib
 
         bool done{ false };
 
-        int entity_id = 1;
+        int entity_id = 0;
 
         while(!reader.eof() && !done) {
 
@@ -1713,10 +1713,10 @@ namespace gerber_lib
                     if(state.interpolation == interpolation_region_end) {
                         if(entities.empty()) {
                             LOG_ERROR("Huh? Wheres the entity man?");
-                            entities.emplace_back(reader.line_number, reader.line_number, image.nets.size() - 1);
+                            entities.emplace_back(reader.line_number, reader.line_number, image.nets.size());
                         }
                         entities.back().line_number_end = reader.line_number;
-                        LOG_VERBOSE("ENTITY {} ENDS AT LINE {}", entity_id, reader.line_number);
+                        LOG_VERBOSE("ENTITY {} ENDS: {}", entity_id, entities.back());
                         entity_id += 1;
                     }
                 } else
@@ -1729,13 +1729,13 @@ namespace gerber_lib
                         case interpolation_linear:
                         case interpolation_clockwise_circular:
                         case interpolation_counterclockwise_circular:
-                            entities.emplace_back(reader.line_number, reader.line_number, image.nets.size() - 1);
-                            LOG_VERBOSE("ENTITY {} OCCURS AT LINE {}", entity_id, reader.line_number);
+                            entities.emplace_back(reader.line_number, reader.line_number, image.nets.size());
+                            LOG_VERBOSE("ENTITY {} OCCURS: {}", entity_id, entities.back());
                             entity_id += 1;
                             break;
                         case interpolation_region_start:
-                            entities.emplace_back(reader.line_number, reader.line_number, image.nets.size() - 1);
-                            LOG_VERBOSE("ENTITY {} STARTS AT LINE {}", entity_id, reader.line_number);
+                            entities.emplace_back(reader.line_number, reader.line_number, image.nets.size());
+                            LOG_VERBOSE("ENTITY {} OCCURS: {}", entity_id, entities.back());
                             break;
                         case interpolation_region_end:
                             LOG_ERROR("Shouldn't get here...");
@@ -1744,8 +1744,8 @@ namespace gerber_lib
                         break;
 
                     case aperture_state_flash:
-                        entities.emplace_back(reader.line_number, reader.line_number, image.nets.size() - 1);
-                        LOG_VERBOSE("ENTITY {} OCCURS AT LINE {}", entity_id, reader.line_number);
+                        entities.emplace_back(reader.line_number, reader.line_number, image.nets.size());
+                        LOG_VERBOSE("ENTITY {} OCCURS: {}", entity_id, entities.back());
                         entity_id += 1;
                         break;
                     }
@@ -2105,7 +2105,7 @@ namespace gerber_lib
 
     //////////////////////////////////////////////////////////////////////
 
-    gerber_error_code gerber::draw_macro(gerber_draw_interface &drawer, gerber_net *current_net, gerber_aperture *const macro_aperture) const
+    gerber_error_code gerber::draw_macro(gerber_draw_interface &drawer, gerber_net *net, gerber_aperture *const macro_aperture) const
     {
         for(auto m : macro_aperture->macro_parameters_list) {
 
@@ -2126,10 +2126,10 @@ namespace gerber_lib
                 }
                 vec2d pos(m->parameters[circle_centre_x], m->parameters[circle_centre_y]);
                 matrix mat = make_rotation(rotation);
-                mat = matrix_multiply(mat, make_translation(current_net->end));
+                mat = matrix_multiply(mat, make_translation(net->end));
                 pos = transform_point(mat, pos);
                 gerber_draw_element e(pos, 0, 360, diameter / 2);
-                drawer.fill_elements(&e, 1, polarity, current_net->entity_id);
+                drawer.fill_elements(&e, 1, polarity, net->entity_id);
             } break;
 
             case aperture_type_macro_moire: {
@@ -2160,7 +2160,7 @@ namespace gerber_lib
                     double rotation = m->parameters[line_20_rotation];
 
                     matrix mat = make_rotation(rotation);
-                    mat = matrix_multiply(mat, make_translation(current_net->end));
+                    mat = matrix_multiply(mat, make_translation(net->end));
                     // transform_points(mat, points);
 
                     std::array<vec2d, 4> points = { vec2d{ start.x, start.y - w2, mat },    //
@@ -2174,7 +2174,7 @@ namespace gerber_lib
                     e[1] = gerber_draw_element(points[3], points[2]);
                     e[2] = gerber_draw_element(points[2], points[1]);
                     e[3] = gerber_draw_element(points[1], points[0]);
-                    drawer.fill_elements(e, 4, polarity_dark, current_net->entity_id);
+                    drawer.fill_elements(e, 4, polarity_dark, net->entity_id);
                 }
             } break;
 
@@ -2191,7 +2191,7 @@ namespace gerber_lib
                     double h2 = h / 2;
 
                     matrix mat = make_rotation(rotation);
-                    mat = matrix_multiply(mat, make_translation(current_net->end));
+                    mat = matrix_multiply(mat, make_translation(net->end));
 
                     std::array<vec2d, 4> points = { vec2d({ x - w2, y - h2 }, mat),      //
                                                     vec2d({ x + w2, y - h2 }, mat),      //
@@ -2203,7 +2203,7 @@ namespace gerber_lib
                     e[1] = gerber_draw_element(points[3], points[2]);
                     e[2] = gerber_draw_element(points[2], points[1]);
                     e[3] = gerber_draw_element(points[1], points[0]);
-                    drawer.fill_elements(e, 4, polarity_dark, current_net->entity_id);
+                    drawer.fill_elements(e, 4, polarity_dark, net->entity_id);
                 }
             } break;
 
@@ -2217,17 +2217,17 @@ namespace gerber_lib
 
     //////////////////////////////////////////////////////////////////////
 
-    gerber_error_code gerber::draw_linear_circle(gerber_draw_interface &drawer, gerber_net *n, gerber_aperture *aperture) const
+    gerber_error_code gerber::draw_linear_circle(gerber_draw_interface &drawer, gerber_net *net, gerber_aperture *aperture) const
     {
         double width = aperture->parameters[0];
 
-        vec2d start = n->start;
-        vec2d end = n->end;
+        vec2d start = net->start;
+        vec2d end = net->end;
 
         double thickness = width / 2;
 
         if(start.x == end.x && start.y == end.y) {
-            return draw_circle(drawer, n, n->start, thickness);
+            return draw_circle(drawer, net, net->start, thickness);
         }
 
         double dx = end.x - start.x;
@@ -2250,19 +2250,19 @@ namespace gerber_lib
                                      gerber_draw_element(p4, p3),                                     //
                                      gerber_draw_element(start, deg + 90, deg + 270, thickness) };    //
 
-        drawer.fill_elements(e, 4, n->level->polarity, n->entity_id);
+        drawer.fill_elements(e, 4, net->level->polarity, net->entity_id);
         return ok;
     }
 
     //////////////////////////////////////////////////////////////////////
 
-    gerber_error_code gerber::draw_linear_rectangle(gerber_draw_interface &drawer, gerber_net *n, gerber_aperture *aperture) const
+    gerber_error_code gerber::draw_linear_rectangle(gerber_draw_interface &drawer, gerber_net *net, gerber_aperture *aperture) const
     {
         double w = aperture->parameters[0] / 2;
         double h = aperture->parameters[1] / 2;
         vec2d size{ w, h };
-        vec2d start = n->start;
-        vec2d end = n->end;
+        vec2d start = net->start;
+        vec2d end = net->end;
         vec2d diff = end.subtract(start);
 
         auto draw_rectangle = [&](vec2d const &bottom_left, vec2d const &top_right) {
@@ -2271,7 +2271,7 @@ namespace gerber_lib
             el[1] = gerber_draw_element(el[0].line_end, top_right);
             el[2] = gerber_draw_element(el[1].line_end, { bottom_left.x, top_right.y });
             el[3] = gerber_draw_element(el[2].line_end, el[0].line_start);
-            drawer.fill_elements(el, 4, n->level->polarity, n->entity_id);
+            drawer.fill_elements(el, 4, net->level->polarity, net->entity_id);
         };
 
         if(diff.length() < 1e-6) {
@@ -2291,16 +2291,17 @@ namespace gerber_lib
 
     //////////////////////////////////////////////////////////////////////
 
-    gerber_error_code gerber::draw_linear_interpolation(gerber_draw_interface &drawer, gerber_net *n, gerber_aperture *aperture) const
+    gerber_error_code gerber::draw_linear_interpolation(gerber_draw_interface &drawer, gerber_net *net, gerber_aperture *aperture) const
     {
         switch(aperture->aperture_type) {
         case aperture_type_circle:
-            draw_linear_circle(drawer, n, aperture);
+            draw_linear_circle(drawer, net, aperture);
             break;
         case aperture_type_rectangle:
-            draw_linear_rectangle(drawer, n, aperture);
+            draw_linear_rectangle(drawer, net, aperture);
             break;
         default:
+            LOG_WARNING("linear interpolation for aperture {} not supported", aperture->aperture_type);
             break;
         }
         return ok;
@@ -2308,10 +2309,10 @@ namespace gerber_lib
 
     //////////////////////////////////////////////////////////////////////
 
-    gerber_error_code gerber::draw_circle(gerber_draw_interface &drawer, gerber_net *n, vec2d const &pos, double radius) const
+    gerber_error_code gerber::draw_circle(gerber_draw_interface &drawer, gerber_net *net, vec2d const &pos, double radius) const
     {
         gerber_draw_element e(pos, 0.0, 360.0, radius);
-        drawer.fill_elements(&e, 1, n->level->polarity, n->entity_id);
+        drawer.fill_elements(&e, 1, net->level->polarity, net->entity_id);
         return ok;
     }
 
@@ -2514,33 +2515,33 @@ namespace gerber_lib
                 }
             }
 
-            gerber_net *n = image.nets[net_index];
+            gerber_net *net = image.nets[net_index];
 
-            if(n->level == nullptr) {
+            if(net->level == nullptr) {
                 LOG_ERROR("NO LEVEL for net at index {}!?", net_index);
                 continue;
             }
 
-            if(n->hidden) {
+            if(net->hidden) {
                 continue;
             }
 
-            if(n->aperture_state == aperture_state_off) {
+            if(net->aperture_state == aperture_state_off) {
                 continue;
             }
 
             gerber_aperture *aperture{ nullptr };
-            map_get_if_found(image.apertures, n->aperture, &aperture);
+            map_get_if_found(image.apertures, net->aperture, &aperture);
 
             // LOG_DEBUG("Interpolation: {}", n->interpolation_method);
 
-            switch(n->interpolation_method) {
+            switch(net->interpolation_method) {
 
             // draw the region
             case interpolation_region_start: {
 
                 if(!should_hide(hide_element_outlines)) {
-                    CHECK(fill_region_path(drawer, net_index, n->level->polarity));
+                    CHECK(fill_region_path(drawer, net_index, net->level->polarity));
                 }
 
             } break;
@@ -2551,7 +2552,7 @@ namespace gerber_lib
 
                     // LOG_DEBUG("Aperture type: {}, aperture state: {}", aperture->aperture_type, n->aperture_state);
 
-                    switch(n->aperture_state) {
+                    switch(net->aperture_state) {
 
                     case aperture_state_off:
                         break;
@@ -2566,7 +2567,7 @@ namespace gerber_lib
                             if(!should_hide(hide_element_circles)) {
                                 // FAIL_IF(aperture->parameters.size() < 3, error_bad_parameter_count);
                                 double radius = (float)aperture->parameters[0] / 2;
-                                CHECK(draw_circle(drawer, n, n->end, radius));
+                                CHECK(draw_circle(drawer, net, net->end, radius));
                                 // DrawAperatureHole(path, p1, p2);
                             }
                         } break;
@@ -2578,7 +2579,7 @@ namespace gerber_lib
                                 double p0 = (float)aperture->parameters[0];
                                 double p1 = (float)aperture->parameters[1];
                                 rect aperture_rect(-(p0 / 2), -(p1 / 2), p0, p1);
-                                CHECK(draw_rectangle(drawer, n, aperture_rect));
+                                CHECK(draw_rectangle(drawer, net, aperture_rect));
                                 // path.AddRectangle(apertureRectangle);
                                 // DrawAperatureHole(path, p2, p3);
                             }
@@ -2590,7 +2591,7 @@ namespace gerber_lib
                                 // FAIL_IF(aperture->parameters.size() < 4, error_bad_parameter_count);
                                 double w = (float)aperture->parameters[0];
                                 double h = (float)aperture->parameters[1];
-                                CHECK(draw_capsule(drawer, n, w, h));
+                                CHECK(draw_capsule(drawer, net, w, h));
                                 // CreateOblongPath(path, p0, p1);
                                 // DrawAperatureHole(path, p2, p3);
                             }
@@ -2611,7 +2612,7 @@ namespace gerber_lib
                         case aperture_type_macro: {
 
                             if(!should_hide(hide_element_macros)) {
-                                CHECK(draw_macro(drawer, n, aperture));
+                                CHECK(draw_macro(drawer, net, aperture));
                             }
                         } break;
 
@@ -2623,7 +2624,7 @@ namespace gerber_lib
                     // interpolate the aperture
                     case aperture_state_on:
 
-                        switch(n->interpolation_method) {
+                        switch(net->interpolation_method) {
 
                         // straight line
                         case interpolation_linear:
@@ -2634,7 +2635,7 @@ namespace gerber_lib
                                     if(aperture->aperture_type != aperture_type_circle) {
                                         LOG_INFO("{}", aperture->aperture_type);
                                     }
-                                    CHECK(draw_linear_interpolation(drawer, n, aperture));
+                                    CHECK(draw_linear_interpolation(drawer, net, aperture));
                                 }
                             }
                             break;
@@ -2647,7 +2648,7 @@ namespace gerber_lib
                                 LOG_ERROR("Missing parameters for arc!?");
                             } else {
                                 if(!should_hide(hide_element_arcs)) {
-                                    CHECK(draw_arc(drawer, n, aperture->parameters[0]));
+                                    CHECK(draw_arc(drawer, net, aperture->parameters[0]));
                                 }
                             }
                             break;

@@ -44,7 +44,7 @@ namespace gerber_3d
     Color const gdi_drawer::select_fill_color{ 32, 64, 64, 255 };
     Color const gdi_drawer::select_whole_fill_color{ 64, 0, 255, 0 };
 
-    Color const gdi_drawer::info_text_background_color{ 128, 0, 0, 0 };
+    Color const gdi_drawer::info_text_background_color{ 192, 0, 0, 0 };
     Color const gdi_drawer::info_text_foreground_color{ 255, 255, 255, 255 };
 
     //////////////////////////////////////////////////////////////////////
@@ -167,7 +167,7 @@ namespace gerber_3d
 
         // Build list of entities under that point
         std::vector<int> entities;
-        int entity_id = 1;
+        int entity_id = 0;
 
         PointF gdi_point((REAL)img.x, (REAL)img.y);
 
@@ -320,14 +320,14 @@ namespace gerber_3d
 
             case VK_LEFT:
                 if(highlight_entity) {
-                    highlight_entity_id = std::max(1, highlight_entity_id - 1);
+                    highlight_entity_id = std::max(0, highlight_entity_id - 1);
                     redraw();
                 }
                 break;
 
             case VK_RIGHT:
                 if(highlight_entity) {
-                    highlight_entity_id = std::min((int)gdi_entities.size(), highlight_entity_id + 1);
+                    highlight_entity_id = std::min((int)gdi_entities.size() - 1, highlight_entity_id + 1);
                     redraw();
                 }
                 break;
@@ -523,8 +523,8 @@ namespace gerber_3d
 
             case mouse_drag_none: {
                 // work out the world coordinate of the mouse position
-                vec2d pos = world_pos_from_window_pos(get_mouse_pos(lParam));
-                LOG_INFO("POS: {:9.5f},{:9.5f}mm {:9.5f},{:9.5f}in ", pos.x, pos.y, pos.x / 25.4, pos.y / 25.4);
+                // vec2d pos = world_pos_from_window_pos(get_mouse_pos(lParam));
+                // LOG_INFO("POS: {:9.5f},{:9.5f}mm {:9.5f},{:9.5f}in ", pos.x, pos.y, pos.x / 25.4, pos.y / 25.4);
             } break;
 
             default:
@@ -597,16 +597,17 @@ namespace gerber_3d
 
     void gdi_drawer::fill_elements(gerber_draw_element const *elements, size_t num_elements, gerber_polarity polarity, int entity_id)
     {
-        entity_id -= 1;
-        if((int)gdi_entities.size() <= entity_id) {
-            bool fill = polarity == polarity_dark || polarity == polarity_positive;
-            gdi_entities.emplace_back((int)gdi_paths.size(), 1, fill);
-        } else {
-            gdi_entities[entity_id].num_paths += 1;
-        }
-
         GraphicsPath *p = new GraphicsPath();
         gdi_paths.push_back(p);
+
+        bool fill = polarity == polarity_dark || polarity == polarity_positive;
+
+        entity_id -= 1;
+        if(gdi_entities.empty() || gdi_entities.back().entity_id != entity_id) {
+            gdi_entities.emplace_back(entity_id, (int)(gdi_paths.size() - 1llu), 1, fill);
+        } else {
+            gdi_entities.back().num_paths += 1;
+        }
 
         for(size_t n = 0; n < num_elements; ++n) {
 
@@ -802,7 +803,7 @@ namespace gerber_3d
 
         // draw just the highlighted net (if there is one)
         if(highlight_entity) {
-            gdi_entity const &highlighted_entity = gdi_entities[highlight_entity_id - 1llu];
+            gdi_entity const &highlighted_entity = gdi_entities[highlight_entity_id];
             Brush *highlight_brush = highlight_clear_brush;
             if(highlighted_entity.fill) {
                 highlight_brush = highlight_fill_brush;
@@ -860,7 +861,7 @@ namespace gerber_3d
 
             using namespace gerber_lib;
 
-            gerber_entity &entity = gerber_file->entities[highlight_entity_id - 1];
+            gerber_entity &entity = gerber_file->entities[highlight_entity_id];
 
             std::string line;
             if(entity.line_number_begin != entity.line_number_end) {
@@ -871,11 +872,31 @@ namespace gerber_3d
 
             gerber_net const *net = gerber_file->image.nets[entity.net_index];
 
+            std::string aperture_info;
+            auto f = gerber_file->image.apertures.find(net->aperture);
+            if(f == gerber_file->image.apertures.end()) {
+                aperture_info = std::format("MISSING {}", net->aperture);
+            } else {
+                gerber_aperture *aperture = f->second;
+                aperture_info = std::format("{} = D{} - {}", net->aperture, aperture->aperture_number, aperture->aperture_type);
+            }
+
             vec2d start_inches{ net->start.x / 25.4, net->start.y / 25.4 };
             vec2d end_inches{ net->end.x / 25.4, net->end.y / 25.4 };
 
-            std::string text = std::format("Entity {:4d} {}\nAperture state: {}\nInterpolation: {}\nStart: {}mm, {}in\nEnd:{}mm, {}in", highlight_entity_id,
-                                           line, net->aperture_state, net->interpolation_method, net->start, start_inches, net->end, end_inches);
+            std::string text = std::format("Entity {:4d} {}\n"                                   //
+                                           "Aperture {}\n"                                       //
+                                           "Aperture state {}\n"                                 //
+                                           "Interpolation {}\n"                                  //
+                                           "Start {:11.6f},{:11.6f}mm, {:11.6f},{:11.6f}in\n"    //
+                                           "  End {:11.6f},{:11.6f}mm, {:11.6f},{:11.6f}in",
+                                           highlight_entity_id, line,                                     //
+                                           aperture_info,                                                 //
+                                           net->aperture_state,                                           //
+                                           net->interpolation_method,                                     //
+                                           net->start.x, net->start.y, start_inches.x, start_inches.y,    //
+                                           net->end.x, net->end.y,                                        //
+                                           end_inches.x, end_inches.y);
 
             std::wstring wide_text = utf16_from_utf8(text);
 

@@ -121,13 +121,14 @@ namespace gerber_3d
 
         struct gdi_entity
         {
-            int path_id;
-            int num_paths;
-            bool fill;
+            int entity_id{};
+            int path_id{};
+            int num_paths{};
+            bool fill{};
 
             gdi_entity() = default;
 
-            gdi_entity(int path_id, int num_paths, bool fill) : path_id(path_id), num_paths(num_paths), fill(fill)
+            gdi_entity(int entity_id, int path_id, int num_paths, bool fill) : entity_id(entity_id), path_id(path_id), num_paths(num_paths), fill(fill)
             {
             }
         };

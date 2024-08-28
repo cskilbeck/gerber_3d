@@ -92,11 +92,13 @@ namespace gerber_lib
         gerber_aperture_type aperture_type{ aperture_type_none };
         gerber_aperture_macro *aperture_macro{ nullptr };
         gerber_unit unit{ unit_unspecified };
+        int aperture_number{};
         std::vector<gerber_macro_parameters *> macro_parameters_list;
 
         std::string to_string() const
         {
-            return std::format("APERTURE: TYPE: {}, UNIT: {}, PARAMETERS: {}, MACRO_PARAMETERS: {}",
+            return std::format("APERTURE D{}: TYPE: {}, UNIT: {}, PARAMETERS: {}, MACRO_PARAMETERS: {}",
+                               aperture_number,        //
                                aperture_type,        //
                                unit,                 //
                                parameters.size(),    //
