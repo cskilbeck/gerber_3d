@@ -14,8 +14,9 @@ namespace gerber_lib
     {
         int line_number_begin;
         int line_number_end;
+        size_t net_index;
 
-        gerber_entity(int begin, int end) : line_number_begin(begin), line_number_end(end)
+        gerber_entity(int begin, int end, size_t net_id) : line_number_begin(begin), line_number_end(end), net_index(net_id)
         {
         }
     };

@@ -4,6 +4,8 @@
 #include <windowsx.h>
 #include "gerber_lib.h"
 #include "gerber_net.h"
+#include "gerber_enums.h"
+#include "gerber_aperture.h"
 #include "gerber_log.h"
 #include "log_drawer.h"
 
@@ -32,8 +34,8 @@ namespace gerber_3d
 {
     Color const gdi_drawer::background_color{ 255, 255, 240, 224 };
     Color const gdi_drawer::gerber_fill_color[2] = { Color(255, 64, 128, 32), Color(128, 64, 128, 32) };
-    Color const gdi_drawer::highlight_color_fill{ 128, 0, 255, 255 };
-    Color const gdi_drawer::highlight_color_clear{ 128, 255, 0, 255 };
+    Color const gdi_drawer::highlight_color_fill{ 64, 0, 255, 255 };
+    Color const gdi_drawer::highlight_color_clear{ 64, 255, 0, 255 };
     Color const gdi_drawer::axes_color{ 255, 0, 0, 0 };
     Color const gdi_drawer::origin_color{ 255, 255, 0, 0 };
     Color const gdi_drawer::extent_color{ 255, 64, 64, 255 };
@@ -111,6 +113,15 @@ namespace gerber_3d
 
     //////////////////////////////////////////////////////////////////////
 
+    gerber_lib::gerber_2d::vec2d gdi_drawer::world_pos_from_window_pos(POINT const &window_pos)
+    {
+        vec2d pos{ (double)window_pos.x, (double)window_pos.y };
+        matrix transform = get_transform_matrix();
+        return vec2d{ pos.x, pos.y, invert_matrix(transform) };
+    }
+
+    //////////////////////////////////////////////////////////////////////
+
     void gdi_drawer::zoom_image(POINT const &pos, double zoom_scale)
     {
         RECT rc;
@@ -146,15 +157,12 @@ namespace gerber_3d
         }
 
         // Get click position in world coordinates
-        vec2d pos{ (double)mouse_pos.x, (double)mouse_pos.y };
-        matrix transform = get_transform_matrix();
-        vec2d img{ pos.x, pos.y, invert_matrix(transform) };
+        vec2d img = world_pos_from_window_pos(mouse_pos);
 
         // Scale the transform because the default pen width is 1.0 which is a whole mm
-        // With scale(100,100), picking accuracy is 10 microns.
         // Note the gdi_point will also get scaled by the transform so no need to scale the input point
         Matrix m;
-        m.Scale(100, 100);
+        m.Scale(1000, 1000);
         graphics->SetTransform(&m);
 
         // Build list of entities under that point
@@ -513,7 +521,12 @@ namespace gerber_3d
                 }
             } break;
 
-            case mouse_drag_none:
+            case mouse_drag_none: {
+                // work out the world coordinate of the mouse position
+                vec2d pos = world_pos_from_window_pos(get_mouse_pos(lParam));
+                LOG_INFO("POS: {:9.5f},{:9.5f}mm {:9.5f},{:9.5f}in ", pos.x, pos.y, pos.x / 25.4, pos.y / 25.4);
+            } break;
+
             default:
                 break;
             }
@@ -845,24 +858,34 @@ namespace gerber_3d
 
         if(highlight_entity) {
 
+            using namespace gerber_lib;
+
             gerber_entity &entity = gerber_file->entities[highlight_entity_id - 1];
 
-            std::wstring line;
+            std::string line;
             if(entity.line_number_begin != entity.line_number_end) {
-                line = std::format(L"Lines {} to {}", entity.line_number_begin, entity.line_number_end);
+                line = std::format("Lines {} to {}", entity.line_number_begin, entity.line_number_end);
             } else {
-                line = std::format(L"Line {}", entity.line_number_begin);
+                line = std::format("Line {}", entity.line_number_begin);
             }
 
-            std::wstring text = std::format(L"Entity {:4d} {}", highlight_entity_id, line);
+            gerber_net const *net = gerber_file->image.nets[entity.net_index];
+
+            vec2d start_inches{ net->start.x / 25.4, net->start.y / 25.4 };
+            vec2d end_inches{ net->end.x / 25.4, net->end.y / 25.4 };
+
+            std::string text = std::format("Entity {:4d} {}\nAperture state: {}\nInterpolation: {}\nStart: {}mm, {}in\nEnd:{}mm, {}in", highlight_entity_id,
+                                           line, net->aperture_state, net->interpolation_method, net->start, start_inches, net->end, end_inches);
+
+            std::wstring wide_text = utf16_from_utf8(text);
 
             PointF origin{ 10, 10 };
             RectF bounding_box;
-            graphics->MeasureString(text.c_str(), (INT)text.size(), info_text_font, origin, &bounding_box);
+            graphics->MeasureString(wide_text.c_str(), (INT)text.size(), info_text_font, origin, &bounding_box);
 
             graphics->FillRectangle(info_text_background_brush, bounding_box);
 
-            graphics->DrawString(text.c_str(), (INT)text.size(), info_text_font, origin, info_text_foregound_brush);
+            graphics->DrawString(wide_text.c_str(), (INT)text.size(), info_text_font, origin, info_text_foregound_brush);
         }
 
         Graphics *window_graphics = Gdiplus::Graphics::FromHDC(hdc);

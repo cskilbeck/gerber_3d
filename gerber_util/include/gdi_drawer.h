@@ -39,6 +39,7 @@ namespace gerber_3d
         gerber_lib::gerber_2d::vec2d image_size_px{};   // image size on screen in pixels
 
         HWND hwnd{};
+        HWND status_hwnd{};
 
         enum gdi_draw_mode
         {
@@ -138,6 +139,7 @@ namespace gerber_3d
         size_t selected_entity_index;
 
         gerber_lib::gerber_2d::matrix get_transform_matrix();
+        gerber_lib::gerber_2d::vec2d world_pos_from_window_pos(POINT const &window_pos);
 
         void on_left_click(POINT const &mouse_pos);
 

@@ -45,7 +45,7 @@ namespace gerber_lib
 
         gerber_level knockout_level{};
 
-        int accuracy_decimal_places{ 3 };
+        int accuracy_decimal_places{ 6 };
 
         int current_net_id{};
 
@@ -69,12 +69,17 @@ namespace gerber_lib
 
         gerber_error_code draw(gerber_draw_interface &drawer, int const hide_elements) const;
         gerber_error_code fill_region_path(gerber_draw_interface &drawer, size_t net_index, gerber_polarity polarity) const;
-        gerber_error_code draw_linear_track(gerber_draw_interface &drawer, gerber_net *n, double width, gerber_polarity polarity) const;
-        gerber_error_code fill_polygon(gerber_draw_interface &drawer, double diameter, int num_sides, double angle_degrees) const;
+
+        gerber_error_code draw_linear_interpolation(gerber_draw_interface &drawer, gerber_net *n, gerber_aperture *aperture) const;
+        gerber_error_code draw_linear_circle(gerber_draw_interface &drawer, gerber_net *n, gerber_aperture *aperture) const;
+        gerber_error_code draw_linear_rectangle(gerber_draw_interface &drawer, gerber_net *n, gerber_aperture *aperture) const;
         gerber_error_code draw_macro(gerber_draw_interface &drawer, gerber_net *current_net, gerber_aperture *const macro_aperture) const;
-        gerber_error_code draw_capsule(gerber_draw_interface &drawer, gerber_net *net, double width, double height, gerber_polarity polarity) const;
-        gerber_error_code draw_arc(gerber_draw_interface &drawer, gerber_net *net, double thickness, gerber_polarity polarity) const;
-        gerber_error_code draw_circle(gerber_draw_interface &drawer, gerber_net *n, double radius, gerber_polarity polarity) const;
+        gerber_error_code draw_capsule(gerber_draw_interface &drawer, gerber_net *net, double width, double height) const;
+        gerber_error_code draw_arc(gerber_draw_interface &drawer, gerber_net *net, double thickness) const;
+        gerber_error_code draw_circle(gerber_draw_interface &drawer, gerber_net *n, vec2d const &pos, double radius) const;
+        gerber_error_code draw_rectangle(gerber_draw_interface &drawer, gerber_net *net, rect const &r) const;
+
+        gerber_error_code fill_polygon(gerber_draw_interface &drawer, double diameter, int num_sides, double angle_degrees) const;
 
         gerber_error_code parse_gerber_segment(gerber_net *net);
 
