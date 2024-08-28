@@ -52,6 +52,9 @@ namespace gerber_lib
 
     gerber_error_code gerber_stats::increment_d_list_count(int number, int count, int line)
     {
+        (void)count;
+        (void)line;
+
         for(auto d : d_codes) {
             if(d->number == number) {
                 d->count += 1;

@@ -753,12 +753,12 @@ namespace gerber_lib
 
         case 'MO': {
 
-            uint32_t command;
-            CHECK(reader.read_short(&command, 2));
+            uint32_t rs_command;
+            CHECK(reader.read_short(&rs_command, 2));
 
             gerber_unit unit{ unit_unspecified };
 
-            switch(command) {
+            switch(rs_command) {
 
             case 'IN':
                 unit = unit_inch;
@@ -1267,7 +1267,7 @@ namespace gerber_lib
 
     //////////////////////////////////////////////////////////////////////
 
-    gerber_error_code gerber::parse_aperture_definition(gerber_aperture *aperture, gerber_image *image, double unit_scale, int *aperture_number)
+    gerber_error_code gerber::parse_aperture_definition(gerber_aperture *aperture, gerber_image *cur_image, double unit_scale, int *aperture_number)
     {
         LOG_CONTEXT("parse_aperture", info);
 
@@ -1310,7 +1310,7 @@ namespace gerber_lib
 
         } else {
             aperture->aperture_type = aperture_type_macro;
-            for(gerber_aperture_macro *macro : image->aperture_macros) {
+            for(gerber_aperture_macro *macro : cur_image->aperture_macros) {
                 if(macro->name.compare(tokens[0]) == 0) {
                     aperture->aperture_macro = macro;
                     break;
@@ -1372,27 +1372,27 @@ namespace gerber_lib
 
     //////////////////////////////////////////////////////////////////////
 
-    void gerber::update_image_bounds(rect &bounds, double repeat_offset_x, double repeat_offset_y, gerber_image &image)
+    void gerber::update_image_bounds(rect &bounds, double repeat_offset_x, double repeat_offset_y, gerber_image &cur_image)
     {
         double minx = bounds.min_pos.x + repeat_offset_x;
         double maxx = bounds.max_pos.x + repeat_offset_x;
         double miny = bounds.min_pos.y + repeat_offset_y;
         double maxy = bounds.max_pos.y + repeat_offset_y;
 
-        if(minx < image.info.extent.min_pos.x) {
-            image.info.extent.min_pos.x = minx;
+        if(minx < cur_image.info.extent.min_pos.x) {
+            cur_image.info.extent.min_pos.x = minx;
         }
 
-        if(maxx > image.info.extent.max_pos.x) {
-            image.info.extent.max_pos.x = maxx;
+        if(maxx > cur_image.info.extent.max_pos.x) {
+            cur_image.info.extent.max_pos.x = maxx;
         }
 
-        if(miny < image.info.extent.min_pos.y) {
-            image.info.extent.min_pos.y = miny;
+        if(miny < cur_image.info.extent.min_pos.y) {
+            cur_image.info.extent.min_pos.y = miny;
         }
 
-        if(maxy > image.info.extent.max_pos.y) {
-            image.info.extent.max_pos.y = maxy;
+        if(maxy > cur_image.info.extent.max_pos.y) {
+            cur_image.info.extent.max_pos.y = maxy;
         }
     }
 
@@ -1552,8 +1552,6 @@ namespace gerber_lib
 
         vec2d scale;
         vec2d center;
-
-        vec2d aperture_size{};
 
         int region_points{};
 
@@ -1947,13 +1945,13 @@ namespace gerber_lib
                             update_image_bounds(bounding_box, repeat_offset.x, repeat_offset.y, image);
                         } else {
 
-                            vec2d aperture_size{};
+                            vec2d ap_size{};
 
                             if(a != nullptr) {
-                                aperture_size.x = a->parameters[0];
-                                aperture_size.y = aperture_size.x;
+                                ap_size.x = a->parameters[0];
+                                ap_size.y = ap_size.x;
                                 if(a->aperture_type == aperture_type_rectangle || a->aperture_type == aperture_type_oval) {
-                                    aperture_size.y = a->parameters[1];
+                                    ap_size.y = a->parameters[1];
                                 }
                             }
                             // If it's an arc path, use a special calculation.
@@ -1969,7 +1967,7 @@ namespace gerber_lib
 
                                 // LOG_INFO("{}:{}", net->circle_segment, arc_extent);
 
-                                vec2d ha{ aperture_size.x / 2, aperture_size.y / 2 };
+                                vec2d ha{ ap_size.x / 2, ap_size.y / 2 };
                                 arc_extent.min_pos = arc_extent.min_pos.subtract(ha);
                                 arc_extent.max_pos = arc_extent.max_pos.add(ha);
 
@@ -1983,11 +1981,11 @@ namespace gerber_lib
                                 // since the start point may be invalid if it is a flash.
                                 if(net->aperture_state != aperture_state_flash) {
                                     // Start points.
-                                    update_net_bounds(bounding_box, net->start.x, net->start.y, aperture_size.x / 2.0, aperture_size.y / 2.0);
+                                    update_net_bounds(bounding_box, net->start.x, net->start.y, ap_size.x / 2.0, ap_size.y / 2.0);
                                 }
 
                                 // Stop points.
-                                update_net_bounds(bounding_box, net->end.x, net->end.y, aperture_size.x / 2, aperture_size.y / 2);
+                                update_net_bounds(bounding_box, net->end.x, net->end.y, ap_size.x / 2, ap_size.y / 2);
                             }
                             // Update the info bounding box with this latest bounding box
                             // don't change the bounding box if the polarity is clear
@@ -2078,6 +2076,10 @@ namespace gerber_lib
 
     gerber_error_code gerber::fill_polygon(gerber_draw_interface &drawer, double diameter, int num_sides, double angle_degrees) const
     {
+        (void)drawer;
+        (void)diameter;
+        (void)num_sides;
+        (void)angle_degrees;
         return ok;
     }
 
@@ -2103,9 +2105,9 @@ namespace gerber_lib
                     polarity = polarity_clear;
                 }
                 vec2d pos(m->parameters[circle_centre_x], m->parameters[circle_centre_y]);
-                matrix m = make_rotation(rotation);
-                m = matrix_multiply(m, make_translation(current_net->end));
-                pos = transform_point(m, pos);
+                matrix mat = make_rotation(rotation);
+                mat = matrix_multiply(mat, make_translation(current_net->end));
+                pos = transform_point(mat, pos);
                 gerber_draw_element e(pos, 0, 360, diameter / 2);
                 drawer.fill_elements(&e, 1, polarity, current_net->entity_id);
             } break;
@@ -2137,12 +2139,15 @@ namespace gerber_lib
                     double w2 = width / 2;
                     double rotation = m->parameters[line_20_rotation];
 
-                    std::array<vec2d, 4> points = { vec2d{ start.x, start.y - w2 }, vec2d{ end.x, start.y - w2 }, vec2d{ end.x, start.y + w2 },
-                                                    vec2d{ start.x, start.y + w2 } };
+                    matrix mat = make_rotation(rotation);
+                    mat = matrix_multiply(mat, make_translation(current_net->end));
+                    // transform_points(mat, points);
 
-                    matrix m = make_rotation(rotation);
-                    m = matrix_multiply(m, make_translation(current_net->end));
-                    transform_points(m, points);
+                    std::array<vec2d, 4> points = { vec2d{ start.x, start.y - w2, mat },    //
+                                                    vec2d{ end.x, start.y - w2, mat },      //
+                                                    vec2d{ end.x, start.y + w2, mat },      //
+                                                    vec2d{ start.x, start.y + w2, mat } };
+
 
                     gerber_draw_element e[4];
                     e[0] = gerber_draw_element(points[0], points[3]);
@@ -2165,13 +2170,13 @@ namespace gerber_lib
                     double w2 = w / 2;
                     double h2 = h / 2;
 
-                    matrix m = make_rotation(rotation);
-                    m = matrix_multiply(m, make_translation(current_net->end));
+                    matrix mat = make_rotation(rotation);
+                    mat = matrix_multiply(mat, make_translation(current_net->end));
 
-                    std::array<vec2d, 4> points = { vec2d({ x - w2, y - h2 }, m),      //
-                                                    vec2d({ x + w2, y - h2 }, m),      //
-                                                    vec2d({ x + w2, y + h2 }, m),      //
-                                                    vec2d({ x - w2, y + h2 }, m) };    //
+                    std::array<vec2d, 4> points = { vec2d({ x - w2, y - h2 }, mat),      //
+                                                    vec2d({ x + w2, y - h2 }, mat),      //
+                                                    vec2d({ x + w2, y + h2 }, mat),      //
+                                                    vec2d({ x - w2, y + h2 }, mat) };    //
 
                     gerber_draw_element e[4];
                     e[0] = gerber_draw_element(points[0], points[3]);
@@ -2239,7 +2244,7 @@ namespace gerber_lib
 
     //////////////////////////////////////////////////////////////////////
 
-    gerber_error_code gerber::draw_arc(gerber_draw_interface &drawer, gerber_net *net,double thickness, gerber_polarity polarity) const
+    gerber_error_code gerber::draw_arc(gerber_draw_interface &drawer, gerber_net *net, double thickness, gerber_polarity polarity) const
     {
         gerber_arc const &arc = net->circle_segment;
 
@@ -2320,7 +2325,6 @@ namespace gerber_lib
                 vec2d inner_intersect{ start_pos.x + cos(inner_angle) * r, start_pos.y + sin(inner_angle) * r };
                 vec2d outer_intersect{ start_pos.x + cos(outer_angle) * r, start_pos.y + sin(outer_angle) * r };
 
-                double mid_degrees = rad_2_deg(mid_angle);
                 double inner_degrees = rad_2_deg(inner_angle);
                 double outer_degrees = rad_2_deg(outer_angle);
 
@@ -2349,7 +2353,7 @@ namespace gerber_lib
 
     gerber_error_code gerber::draw_capsule(gerber_draw_interface &drawer, gerber_net *net, double width, double height, gerber_polarity polarity) const
     {
-        vec2d const &center = net->start; 
+        vec2d const &center = net->start;
         gerber_draw_element el[4];
 
         double w2 = width / 2;

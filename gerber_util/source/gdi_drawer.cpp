@@ -525,7 +525,7 @@ namespace gerber_3d
         RECT client_rect;
         GetClientRect(hwnd, &client_rect);
 
-        if(bitmap != nullptr && bitmap->GetWidth() == client_rect.right && bitmap->GetHeight() == client_rect.bottom) {
+        if(bitmap != nullptr && bitmap->GetWidth() == (UINT)client_rect.right && bitmap->GetHeight() == (UINT)client_rect.bottom) {
             return;
         }
 

@@ -216,9 +216,9 @@ namespace gerber_lib
 
                 // flush the stack
                 while(!ops.empty()) {
-                    gerber_opcode c = ops.top();
+                    gerber_opcode opcode = ops.top();
                     ops.pop();
-                    instructions.emplace_back(c);
+                    instructions.emplace_back(opcode);
                 }
 
                 // this was either an assignment or a primitive
@@ -353,8 +353,6 @@ namespace gerber_lib
         LOG_CONTEXT("execute_aperture_macro", info);
 
         LOG_DEBUG("Execute aperture macro \"{}\"", aperture_macro->name);
-
-        constexpr int extra_stack_size = 10;
 
         size_t num_of_parameters{ 0 };
         bool clear_operator_used{ false };
@@ -546,7 +544,6 @@ namespace gerber_lib
                     }
 
                     double exposure = 1.0;
-                    double rotation = 0.0;
 
                     // Convert any mm values to inches.
                     switch(type) {

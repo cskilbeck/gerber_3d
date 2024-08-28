@@ -61,7 +61,7 @@ namespace gerber_lib
 
         void update_net_bounds(gerber_2d::rect &bounds, std::vector<gerber_2d::vec2d> const &points) const;
         void update_net_bounds(gerber_2d::rect &bounds, double x, double y, double w, double h) const;
-        void update_image_bounds(gerber_2d::rect &bounds, double repeat_offset_x, double repeat_offset_y, gerber_image &image);
+        void update_image_bounds(gerber_2d::rect &bounds, double repeat_offset_x, double repeat_offset_y, gerber_image &cur_image);
 
         gerber_error_code get_aperture_points(gerber_macro_parameters const &macro, gerber_net *net, std::vector<gerber_2d::vec2d> &points);
 
@@ -85,7 +85,7 @@ namespace gerber_lib
 
         gerber_error_code parse_rs274x(gerber_net *net);
 
-        gerber_error_code parse_aperture_definition(gerber_aperture *aperture, gerber_image *image, double unit_scale, int *aperture_number);
+        gerber_error_code parse_aperture_definition(gerber_aperture *aperture, gerber_image *cur_image, double unit_scale, int *aperture_number);
 
         void update_knockout_measurements();
 

@@ -10,6 +10,11 @@ add_executable(gerber_util
     ${UTIL_HEADERS}
 )
 
+if(MSVC)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /MP")       # multiprocessor build
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /wd4201")   # allow anonymous structs in unions
+endif()
+
 target_include_directories(gerber_util PRIVATE ${OpenCASCADE_INCLUDE_DIR})
 
 target_include_directories(gerber_util PRIVATE
@@ -19,6 +24,12 @@ target_include_directories(gerber_util PRIVATE
 target_link_libraries(gerber_util PRIVATE gerber_lib ${OpenCASCADE_LIBRARIES})
 
 target_compile_features(gerber_util PRIVATE cxx_std_20)
+
+if(MSVC)
+  target_compile_options(gerber_util PRIVATE /W4 /WX)
+else()
+  target_compile_options(gerber_util PRIVATE -Wall -Wextra -Wpedantic -Werror)
+endif()
 
 source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR} FILES ${UTIL_SOURCES} ${UTIL_HEADERS})
 

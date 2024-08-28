@@ -81,6 +81,7 @@ void occ_viewer_interactor::handleViewRedraw(const Handle(AIS_InteractiveContext
 
 void occ_viewer_interactor::ProcessConfigure(bool theIsResized)
 {
+    (void) theIsResized;
     if(!m_view.IsNull()) {
         m_view->MustBeResized();
         FlushViewEvents(m_ctx, m_view, true);
@@ -98,7 +99,7 @@ void occ_viewer_interactor::KeyDown(Aspect_VKey key, double time, double pressur
 
 void occ_viewer_interactor::KeyUp(Aspect_VKey key, double time)
 {
-    const unsigned int modifOld = myKeys.Modifiers();
+    // const unsigned int modifOld = myKeys.Modifiers();
     AIS_ViewController::KeyUp(key, time);
     const unsigned int modifNew = myKeys.Modifiers();
 

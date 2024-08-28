@@ -284,6 +284,7 @@ LRESULT WINAPI occ_viewer::wnd_proc_proxy(HWND hwnd, UINT message, WPARAM wparam
     }
     occ_viewer *viewer = (occ_viewer *)GetWindowLongPtrA(hwnd, int(GWLP_USERDATA));
     if(viewer != NULL) {
+        viewer->hwnd = hwnd;
         return viewer->wnd_proc(hwnd, message, wparam, lparam);
     }
     return DefWindowProcA(hwnd, message, wparam, lparam);
@@ -291,7 +292,7 @@ LRESULT WINAPI occ_viewer::wnd_proc_proxy(HWND hwnd, UINT message, WPARAM wparam
 
 //////////////////////////////////////////////////////////////////////
 
-LRESULT occ_viewer::wnd_proc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam)
+LRESULT occ_viewer::wnd_proc(HWND, UINT message, WPARAM wparam, LPARAM lparam)
 {
     if(view.IsNull()) {
         return DefWindowProc(hwnd, message, wparam, lparam);
