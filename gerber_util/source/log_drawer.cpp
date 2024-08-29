@@ -9,10 +9,9 @@ namespace gerber_3d
 {
     //////////////////////////////////////////////////////////////////////
 
-    void log_drawer::set_gerber(gerber_lib::gerber *g, int hide_elements)
+    void log_drawer::set_gerber(gerber_lib::gerber *g)
     {
         gerber_file = g;
-        elements_to_hide = hide_elements;
         LOG_DEBUG("LOGGER IS READY, {} nets in total", g->image.nets.size());
     }
 

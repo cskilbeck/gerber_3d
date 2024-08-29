@@ -1,5 +1,6 @@
 
 #include "gdi_drawer.h"
+#include <thread>
 #include <algorithm>
 #include <windowsx.h>
 #include "gerber_lib.h"
@@ -31,6 +32,7 @@ namespace
     {
         return POINT{ GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
     }
+
 };    // namespace
 
 namespace gerber_3d
@@ -85,17 +87,16 @@ namespace gerber_3d
 
     //////////////////////////////////////////////////////////////////////
 
-    void gdi_drawer::set_gerber(gerber *g, int hide_elements)
+    void gdi_drawer::set_gerber(gerber *g)
     {
         gerber_file = g;
         set_default_zoom();
-        elements_to_hide = hide_elements;
         while(!gdi_paths.empty()) {
             delete gdi_paths.back();
             gdi_paths.pop_back();
         }
         gdi_entities.clear();
-        gerber_file->draw(*this, elements_to_hide);
+        gerber_file->draw(*this);
         redraw();
     }
 
@@ -228,6 +229,9 @@ namespace gerber_3d
         case WM_CREATE: {
             Gdiplus::GdiplusStartupInput gdiplusStartupInput;
             GdiplusStartup(&gdiplus_token, &gdiplusStartupInput, NULL);
+
+            occ.show_progress = true;
+            occ.create_window(100, 100, 700, 700);
         } break;
 
 
@@ -268,7 +272,7 @@ namespace gerber_3d
                 if(gerber_file != nullptr && highlight_entity) {
                     log_drawer logger;
                     logger.set_gerber(gerber_file);
-                    gerber_file->draw(logger, elements_to_hide);
+                    gerber_file->draw(logger);
                 }
                 break;
 
@@ -327,6 +331,13 @@ namespace gerber_3d
                     highlight_entity_id = std::min((int)gdi_entities.size() - 1, highlight_entity_id + 1);
                     redraw();
                 }
+                break;
+
+            case '3':
+                std::thread([&]() {
+                    occ.set_gerber(gerber_file);
+                    PostMessageA(occ.vout.hwnd, WM_USER, 0, 0);
+                }).detach();
                 break;
             }
             break;

@@ -23,6 +23,20 @@ namespace
     using namespace gerber_lib;
     using namespace gerber_2d;
 
+    int hide_elements = 0
+
+#if 0
+    | hide_element_lines
+    | hide_element_arcs
+    | hide_element_circles
+    | hide_element_rectangles
+    | hide_element_ovals
+    | hide_element_polygons
+    | hide_element_outlines
+    | hide_element_macros
+#endif
+        ;
+
     //////////////////////////////////////////////////////////////////////
 
     void add_trailing_zeros(int integer_part, int decimal_part, int length, int *coordinate)
@@ -2475,7 +2489,7 @@ namespace gerber_lib
 
     //////////////////////////////////////////////////////////////////////
 
-    gerber_error_code gerber::draw(gerber_draw_interface &drawer, int const hide_elements) const
+    gerber_error_code gerber::draw(gerber_draw_interface &drawer) const
     {
         auto should_hide = [=](gerber_hide_elements h) { return (static_cast<int>(h) & hide_elements) != 0; };
 

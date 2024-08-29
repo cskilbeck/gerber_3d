@@ -18,14 +18,12 @@ namespace gerber_3d
     {
         occ_drawer() = default;
 
-        void set_gerber(gerber_lib::gerber *g, int hide_elements = gerber_lib::hide_element_none) override;
+        void set_gerber(gerber_lib::gerber *g) override;
         void fill_elements(gerber_lib::gerber_draw_element const *elements, size_t num_elements, gerber_lib::gerber_polarity polarity, int entity_id) override;
 
         void on_gerber_finished();
 
         void create_window(int x, int y, int w, int h);
-
-        int elements_to_hide{ 0 };
 
         occ_viewer vout{};
 

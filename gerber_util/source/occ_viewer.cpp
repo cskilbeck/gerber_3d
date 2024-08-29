@@ -188,6 +188,8 @@ void occ_viewer::add_shapes_to_scene()
 
     LOG_INFO("Adding shapes to scene");
 
+    interactive_context->RemoveAll(false);
+
     int shape_index = 0;
     for(auto const &sh : shapes) {
         LOG_INFO("Adding shape {}", shape_index);
@@ -205,6 +207,7 @@ void occ_viewer::add_shapes_to_scene()
     LOG_INFO("Added {} shapes to scene", shape_index);
     view->SetProj(V3d_TypeOfOrientation_Zup_Top);
     view->FitAll();
+    shapes.clear();
 }
 
 //////////////////////////////////////////////////////////////////////
@@ -299,6 +302,7 @@ LRESULT occ_viewer::wnd_proc(HWND, UINT message, WPARAM wparam, LPARAM lparam)
     }
 
     switch(message) {
+
     case WM_PAINT: {
         PAINTSTRUCT aPaint;
         BeginPaint(hwnd, &aPaint);
@@ -306,10 +310,16 @@ LRESULT occ_viewer::wnd_proc(HWND, UINT message, WPARAM wparam, LPARAM lparam)
         viewer_interactor->ProcessExpose();
         break;
     }
+
     case WM_SIZE: {
         viewer_interactor->ProcessConfigure(Standard_True);
         break;
     }
+
+    case WM_USER:
+        add_shapes_to_scene();
+        break;
+
     case WM_MOVE:
     case WM_MOVING:
     case WM_SIZING: {

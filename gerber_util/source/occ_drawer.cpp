@@ -118,11 +118,9 @@ namespace gerber_3d
 
     //////////////////////////////////////////////////////////////////////
 
-    void occ_drawer::set_gerber(gerber *g, int hide_elements)
+    void occ_drawer::set_gerber(gerber *g)
     {
-        elements_to_hide = hide_elements;
-
-        g->draw(*this, elements_to_hide);
+        g->draw(*this);
 
         // deal with the last current_face which might be dangling
 
@@ -151,6 +149,10 @@ namespace gerber_3d
             vout.add_shape(prism.Shape());
             LOG_DEBUG("BRepPrimAPI_MakePrism complete, took {:7.2} seconds", t.elapsed_seconds());
             gerber_file = g;
+            previous_fill = false;
+            current_fill = false;
+            current_face.Nullify();
+            main_face.Nullify();
         }
     }
 

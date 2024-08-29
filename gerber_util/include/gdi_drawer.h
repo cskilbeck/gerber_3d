@@ -13,6 +13,8 @@
 #include "gerber_2d.h"
 #include "gerber_draw.h"
 
+#include "occ_drawer.h"
+
 //////////////////////////////////////////////////////////////////////
 
 namespace gerber_3d
@@ -21,7 +23,7 @@ namespace gerber_3d
     {
         gdi_drawer() = default;
 
-        void set_gerber(gerber_lib::gerber *g, int hide_elements = gerber_lib::hide_element_none) override;
+        void set_gerber(gerber_lib::gerber *g) override;
         void fill_elements(gerber_lib::gerber_draw_element const *elements, size_t num_elements, gerber_lib::gerber_polarity polarity, int entity_id) override;
 
         using Graphics = Gdiplus::Graphics;
@@ -141,6 +143,8 @@ namespace gerber_3d
 
         gerber_lib::gerber_2d::matrix get_transform_matrix();
         gerber_lib::gerber_2d::vec2d world_pos_from_window_pos(POINT const &window_pos);
+
+        gerber_3d::occ_drawer occ;
 
         void on_left_click(POINT const &mouse_pos);
 

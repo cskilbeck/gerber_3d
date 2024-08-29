@@ -1,7 +1,6 @@
 //////////////////////////////////////////////////////////////////////
 
 #include <stdio.h>
-#include <thread>
 #include <iostream>
 #include <format>
 
@@ -9,8 +8,7 @@
 #include "gdi_drawer.h"
 #include "occ_drawer.h"
 
-// #define SHOW_3D
-#define SHOW_GDI
+#define SHOW_3D
 
 //////////////////////////////////////////////////////////////////////
 
@@ -22,8 +20,6 @@ int main()
 
     log_set_emitter_function(puts);
     log_set_level(log_level_debug);
-
-    int hide = 0;
 
     // char const *filename = "gerber_test_files\\test_outline_Copper_Signal_Top.gbr";
     // char const *filename = "F:\\test_pcb\\test_outline_Copper_Signal_Top.gbr";
@@ -42,11 +38,11 @@ int main()
     // char const *filename = "gerber_test_files\\controller_Copper_Signal_Top.gbr";
     // char const *filename = "gerber_test_files\\react4_Copper_Signal_Bot.gbr";
     // char const *filename = "gerber_test_files\\ble_gadget_Copper_Signal_Top.gbr";
-    // char const *filename = "gerber_test_files\\clutch_pcb_Copper_Signal_Top.gbr";
+    char const *filename = "gerber_test_files\\clutch_pcb_Copper_Signal_Top.gbr";
     // char const *filename = "gerber_test_files\\buck4_Copper_Signal_Top.gbr";
     // char const *filename = "gerber_test_files\\wch554g_Copper_Signal_Bot.gbr";
     // char const *filename = "gerber_test_files\\clock_Copper_Signal_Bot.gbr";
-    char const *filename = "gerber_test_files\\clock_Copper_Signal_Top.gbr";
+    // char const *filename = "gerber_test_files\\clock_Copper_Signal_Top.gbr";
 
     // char const *filename = "gerber_test_files\\SMD_prim_21.gbr";
     // char const *filename = "gerber_test_files\\SMD_prim_21_single.gbr";
@@ -67,52 +63,15 @@ int main()
         return 1;
     }
 
-#if 0
-    // hide |= hide_element_lines;
-    // hide |= hide_element_arcs;
-    // hide |= hide_element_circles;
-    // hide |= hide_element_rectangles;
-    // hide |= hide_element_ovals;
-    // hide |= hide_element_polygons;
-    // hide |= hide_element_outlines;
-    // hide |= hide_element_macros;
-#endif
-
-#if defined(SHOW_GDI)
     gerber_3d::gdi_drawer gdi;
     gdi.create_window(850, 100, 700, 700);
-    gdi.set_gerber(&g, hide);
-#endif
-
-    // For OCC, create the mesh in a thread
-
-    HANDLE occ_event = CreateEvent(nullptr, false, false, nullptr);
-
-#if defined(SHOW_3D)
-    gerber_3d::occ_drawer occ;
-    occ.show_progress = true;
-    occ.create_window(100, 100, 700, 700);
-    std::thread([&]() {
-        occ.set_gerber(&g, hide);
-        SetEvent(occ_event);    // tell main thread that the mesh is ready to add to the scene
-    }).detach();
-#endif
-
-    HANDLE events[] = { occ_event };
+    gdi.set_gerber(&g);
 
     while(true) {
 
-        switch(MsgWaitForMultipleObjects((DWORD)array_length(events), events, false, 12, QS_ALLEVENTS)) {
+        switch(MsgWaitForMultipleObjects(0, nullptr, false, 12, QS_ALLEVENTS)) {
 
-            // occ_event: add mesh to scene
-        case WAIT_OBJECT_0:
-#if defined(SHOW_3D)
-            occ.on_gerber_finished();
-#endif
-            break;
-
-            // windows messages
-        case WAIT_OBJECT_0 + 1: {
+        case WAIT_OBJECT_0: {
             MSG msg;
             while(PeekMessageA(&msg, NULL, 0, 0, PM_REMOVE)) {
 
