@@ -196,21 +196,8 @@ namespace gerber_3d
             return;
         }
 
-        // Clicked on the same set of entities?
-        bool same{ false };
-        if(entities.size() == entities_clicked.size()) {
-            bool different{ false };
-            for(size_t i = 0; i < entities.size(); ++i) {
-                if(entities[i] != entities_clicked[i]) {
-                    different = true;
-                    break;
-                }
-            }
-            same = !different;
-        }
-
         // Different set, reset the cycling index
-        if(!same) {
+        if(entities != entities_clicked) {
             entities_clicked = entities;
             selected_entity_index = entities_clicked.size() - 1;
             highlight_entity = true;
