@@ -57,15 +57,10 @@ int main()
     // char const *filename = "gerber_test_files\\wch554g_Soldermask_Bot.gbr";
     // char const *filename = "gerber_test_files\\wch554g_Profile.gbr";
 
-    gerber g;
-
-    if(g.parse_file(filename) != ok) {
-        return 1;
-    }
-
     gerber_3d::gdi_drawer gdi;
     gdi.create_window(850, 100, 700, 700);
-    gdi.set_gerber(&g);
+
+    gdi.load_gerber_file(filename);
 
     while(true) {
 

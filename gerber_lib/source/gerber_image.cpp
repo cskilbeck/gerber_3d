@@ -10,7 +10,7 @@ namespace gerber_lib
 {
     //////////////////////////////////////////////////////////////////////
 
-    gerber_image ::~gerber_image()
+    void gerber_image::cleanup()
     {
         for(auto p : apertures) {
             delete p.second;
@@ -31,6 +31,13 @@ namespace gerber_lib
             delete ns;
         }
         net_states.clear();
+    }
+
+    //////////////////////////////////////////////////////////////////////
+
+    gerber_image ::~gerber_image()
+    {
+        cleanup();
     }
 
 }    // namespace gerber_lib

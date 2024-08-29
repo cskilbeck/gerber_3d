@@ -66,6 +66,8 @@ namespace gerber_lib
             return true;
         }
 
+        void cleanup();
+
         void update_net_bounds(gerber_2d::rect &bounds, std::vector<gerber_2d::vec2d> const &points) const;
         void update_net_bounds(gerber_2d::rect &bounds, double x, double y, double w, double h) const;
         void update_image_bounds(gerber_2d::rect &bounds, double repeat_offset_x, double repeat_offset_y, gerber_image &cur_image);

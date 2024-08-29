@@ -64,6 +64,13 @@ namespace gerber_lib
 
         gerber_stats() = default;
 
+        ~gerber_stats()
+        {
+            cleanup();
+        }
+
+        void cleanup();
+
         //////////////////////////////////////////////////////////////////////
 
         void add_aperture(int level, int number, gerber_aperture_type type, double parameter[5]);

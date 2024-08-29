@@ -67,6 +67,8 @@ namespace gerber_lib
 
         gerber_image() = default;
 
+        void cleanup();
+
         ~gerber_image();
     };
 

@@ -87,8 +87,27 @@ namespace gerber_3d
 
     //////////////////////////////////////////////////////////////////////
 
+    gerber_error_code gdi_drawer::load_gerber_file(std::string const &filename)
+    {
+        std::thread(
+            [this](std::string filename) {
+                std::unique_ptr<gerber> new_gerber{ std::make_unique<gerber>() };
+                CHECK(new_gerber->parse_file(filename.c_str()));
+                PostMessage(hwnd, WM_USER, 0, (LPARAM)new_gerber.release());
+                return ok;
+            },
+            filename)
+            .detach();
+        return gerber_lib::ok;
+    }
+
+    //////////////////////////////////////////////////////////////////////
+
     void gdi_drawer::set_gerber(gerber *g)
     {
+        if(gerber_file != nullptr) {
+            delete gerber_file;
+        }
         gerber_file = g;
         set_default_zoom();
         while(!gdi_paths.empty()) {
@@ -316,6 +335,7 @@ namespace gerber_3d
                 std::string filename = get_open_filename();
                 if(!filename.empty()) {
                     LOG_INFO("{}", filename);
+                    load_gerber_file(filename);
                 }
             } break;
 
@@ -341,6 +361,13 @@ namespace gerber_3d
                 break;
             }
             break;
+
+            //////////////////////////////////////////////////////////////////////
+            // A gerber file was loaded
+
+        case WM_USER: {
+            set_gerber((gerber *)lParam);
+        } break;
 
             //////////////////////////////////////////////////////////////////////
 

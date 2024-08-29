@@ -9,6 +9,15 @@ namespace gerber_lib
 {
     //////////////////////////////////////////////////////////////////////
 
+    void gerber_stats::cleanup()
+    {
+        errors.clear();
+        apertures.clear();
+        d_codes.clear();
+    }
+
+    //////////////////////////////////////////////////////////////////////
+
     void gerber_stats::add_aperture(int level, int number, gerber_aperture_type type, double parameter[5])
     {
         for(auto const a : apertures) {

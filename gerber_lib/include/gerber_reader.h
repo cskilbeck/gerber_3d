@@ -37,7 +37,7 @@ namespace gerber_lib
         std::ifstream input_stream;
         std::string filename;
         std::vector<char> file_contents;
-        size_t file_pos;
+        size_t file_pos{};
     };
 
     //////////////////////////////////////////////////////////////////////

@@ -230,8 +230,18 @@ namespace gerber_lib
 {
     //////////////////////////////////////////////////////////////////////
 
+    void gerber::cleanup()
+    {
+        image.cleanup();
+        stats.cleanup();
+    }
+
+    //////////////////////////////////////////////////////////////////////
+
     gerber_error_code gerber::parse_file(char const *file_path)
     {
+        cleanup();
+
         image.file_type = file_type_rs274x;
 
         image.gerber = this;

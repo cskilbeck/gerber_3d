@@ -23,6 +23,8 @@ namespace gerber_3d
     {
         gdi_drawer() = default;
 
+        gerber_lib::gerber_error_code load_gerber_file(std::string const &filename);
+
         void set_gerber(gerber_lib::gerber *g) override;
         void fill_elements(gerber_lib::gerber_draw_element const *elements, size_t num_elements, gerber_lib::gerber_polarity polarity, int entity_id) override;
 
