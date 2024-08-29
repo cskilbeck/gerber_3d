@@ -37,8 +37,8 @@ int main()
 
     // char const *filename = "gerber_test_files\\controller_Copper_Signal_Top.gbr";
     // char const *filename = "gerber_test_files\\react4_Copper_Signal_Bot.gbr";
-    // char const *filename = "gerber_test_files\\ble_gadget_Copper_Signal_Top.gbr";
-    char const *filename = "gerber_test_files\\clutch_pcb_Copper_Signal_Top.gbr";
+    char const *filename = "gerber_test_files\\ble_gadget_Copper_Signal_Top.gbr";
+    // char const *filename = "gerber_test_files\\clutch_pcb_Copper_Signal_Top.gbr";
     // char const *filename = "gerber_test_files\\buck4_Copper_Signal_Top.gbr";
     // char const *filename = "gerber_test_files\\wch554g_Copper_Signal_Bot.gbr";
     // char const *filename = "gerber_test_files\\clock_Copper_Signal_Bot.gbr";

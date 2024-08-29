@@ -116,6 +116,9 @@ namespace gerber_3d
         }
         gdi_entities.clear();
         gerber_file->draw(*this);
+        entities_clicked.clear();
+        selected_entity_index = 0;
+        highlight_entity = false;
         redraw();
     }
 
@@ -181,6 +184,7 @@ namespace gerber_3d
 
         // Get click position in world coordinates
         vec2d img = world_pos_from_window_pos(mouse_pos);
+        PointF gdi_mouse_mos{ (REAL)img.x, (REAL)img.y };
 
         // Scale the transform because the default pen width is 1.0 which is a whole mm
         // Note the gdi_point will also get scaled by the transform so no need to scale the input point
@@ -196,18 +200,21 @@ namespace gerber_3d
 
         for(auto const &entity : gdi_entities) {
 
-            int path_id = entity.path_id;
+            if(entity.bounds.Contains(gdi_mouse_mos)) {
 
-            for(int n = 0; n < entity.num_paths; ++n) {
+                int path_id = entity.path_id;
 
-                GraphicsPath *path = gdi_paths[path_id];
+                for(int n = 0; n < entity.num_paths; ++n) {
 
-                if(path->IsVisible(gdi_point, graphics)) {
-                    LOG_DEBUG("ENTITY {} is visible via PATH {}", entity_id, path_id);
-                    entities.push_back(entity_id);
-                    break;
+                    GraphicsPath *path = gdi_paths[path_id];
+
+                    if(path->IsVisible(gdi_point, graphics)) {
+                        LOG_DEBUG("ENTITY {} is visible via PATH {}", entity_id, path_id);
+                        entities.push_back(entity_id);
+                        break;
+                    }
+                    path_id += 1;
                 }
-                path_id += 1;
             }
             entity_id += 1;
         }
@@ -295,9 +302,7 @@ namespace gerber_3d
                 }
                 break;
 
-            case 'Q':
             case 27:
-                release_gdi_resources();
                 DestroyWindow(hwnd);
                 break;
 
@@ -644,6 +649,8 @@ namespace gerber_3d
             gdi_entities.back().num_paths += 1;
         }
 
+        auto &entity = gdi_entities.back();
+
         for(size_t n = 0; n < num_elements; ++n) {
 
             gerber_draw_element const &e = elements[n];
@@ -660,7 +667,14 @@ namespace gerber_3d
             } break;
             }
         }
-        p->CloseAllFigures();
+        p->CloseFigure();
+        RectF bounds;
+        p->GetBounds(&bounds, nullptr, nullptr);
+        if(entity.bounds.IsEmptyArea()) {
+            entity.bounds = bounds;
+        } else {
+            RectF::Union(entity.bounds, entity.bounds, bounds);
+        }
     }
 
     //////////////////////////////////////////////////////////////////////
@@ -691,6 +705,7 @@ namespace gerber_3d
         axes_pen = new Pen(axes_color, 0);
         debug_pen = new Pen(debug_color, 2);
         origin_pen = new Pen(origin_color, 0);
+        thin_pen = new Pen(Color{ 255, 0, 0, 0 }, 1);
         fill_brush[0] = new SolidBrush(gerber_fill_color[0]);
         fill_brush[1] = new SolidBrush(gerber_fill_color[1]);
         clear_brush[0] = new SolidBrush(gerber_clear_color[0]);
@@ -703,7 +718,7 @@ namespace gerber_3d
         select_whole_fill_brush = new SolidBrush(select_whole_fill_color);
         info_text_background_brush = new SolidBrush(info_text_background_color);
         info_text_foregound_brush = new SolidBrush(info_text_foreground_color);
-        info_text_font = new Font(L"Consolas", 10.0f, Gdiplus::FontStyleRegular);
+        info_text_font = new Font(L"Consolas", 12.0f, Gdiplus::FontStyleRegular);
     }
 
     //////////////////////////////////////////////////////////////////////
@@ -732,6 +747,7 @@ namespace gerber_3d
         safe_delete(debug_pen);
         safe_delete(axes_pen);
         safe_delete(origin_pen);
+        safe_delete(thin_pen);
         safe_delete(select_outline_pen);
         safe_delete(select_fill_brush);
         safe_delete(select_whole_fill_brush);
@@ -900,6 +916,13 @@ namespace gerber_3d
 
             gerber_entity &entity = gerber_file->entities[highlight_entity_id];
 
+#if defined(DRAW_SELECTION_BOUNDING_BOXES)
+            graphics->SetTransform(&gdi_matrix);
+            gdi_entity const &highlighted_entity = gdi_entities[highlight_entity_id];
+            graphics->DrawRectangle(origin_pen, highlighted_entity.bounds);
+            graphics->ResetTransform();
+#endif
+
             std::string line;
             if(entity.line_number_begin != entity.line_number_end) {
                 line = std::format("Lines {} to {}", entity.line_number_begin, entity.line_number_end);
@@ -917,7 +940,7 @@ namespace gerber_3d
                 aperture_info = "None";
             } else {
                 gerber_aperture *aperture = f->second;
-                aperture_info = std::format("D{} - {}", aperture->aperture_number, aperture->aperture_type);
+                aperture_info = std::format("D{} - {}", aperture->aperture_number, aperture->get_description());
                 net_info = std::format("At {}", net->end);
 
                 // net->aperture_state should be aperture_state_flash at this point...

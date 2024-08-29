@@ -260,7 +260,7 @@ namespace gerber_lib
 
         CHECK(parse_gerber_segment(current_net));
 
-        LOG_VERBOSE("Parsing complete after {} lines", reader.line_number);
+        LOG_VERBOSE("Parsing complete after {} lines, found {} entities", reader.line_number, entities.size());
 
         return ok;
     }

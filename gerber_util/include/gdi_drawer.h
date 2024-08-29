@@ -36,6 +36,7 @@ namespace gerber_3d
         using Pen = Gdiplus::Pen;
         using Brush = Gdiplus::Brush;
         using Font = Gdiplus::Font;
+        using RectF = Gdiplus::RectF;
 
         ULONG_PTR gdiplus_token{};
 
@@ -105,6 +106,7 @@ namespace gerber_3d
         Pen *origin_pen{ nullptr };
         Pen *extent_pen{ nullptr };
         Pen *select_outline_pen{ nullptr };
+        Pen *thin_pen{ nullptr };
         Brush *select_fill_brush{ nullptr };
         Brush *select_whole_fill_brush{ nullptr };
         Brush *fill_brush[2]{ nullptr, nullptr };
@@ -129,10 +131,12 @@ namespace gerber_3d
             int path_id{};
             int num_paths{};
             bool fill{};
+            RectF bounds{};
 
             gdi_entity() = default;
 
-            gdi_entity(int entity_id, int path_id, int num_paths, bool fill) : entity_id(entity_id), path_id(path_id), num_paths(num_paths), fill(fill)
+            gdi_entity(int entity_id, int path_id, int num_paths, bool fill)
+                : entity_id(entity_id), path_id(path_id), num_paths(num_paths), fill(fill), bounds{}
             {
             }
         };

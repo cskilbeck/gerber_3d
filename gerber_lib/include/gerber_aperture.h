@@ -105,6 +105,8 @@ namespace gerber_lib
                                macro_parameters_list.size());
         }
 
+        std::string get_description() const;
+
         gerber_aperture() = default;
 
         ~gerber_aperture();

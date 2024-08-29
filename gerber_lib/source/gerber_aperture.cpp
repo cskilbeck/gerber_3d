@@ -1,5 +1,6 @@
 //////////////////////////////////////////////////////////////////////
 
+#include <format>
 #include <stack>
 #include <map>
 
@@ -631,6 +632,34 @@ namespace gerber_lib
         LOG_DEBUG("aperture macro \"{}\" aperture macro: clear operator was {}used", aperture_macro->name, clear_operator_used ? "" : "not ");
 
         return ok;
+    }
+
+    //////////////////////////////////////////////////////////////////////
+
+    std::string gerber_aperture::get_description() const
+    {
+        switch(aperture_type) {
+        case aperture_type_none: {
+            return "none?";
+        } break;
+        case aperture_type_circle: {
+            return std::format("{}, radius {}", aperture_type, parameters[0]);
+        } break;
+        case aperture_type_rectangle: {
+            return std::format("{}, {}x{}", aperture_type, parameters[0], parameters[1]);
+        } break;
+        case aperture_type_oval: {
+            return std::format("{}, {}x{}", aperture_type, parameters[0], parameters[1]);
+        } break;
+        case aperture_type_polygon: {
+            return std::format("{}", aperture_type);
+        } break;
+        case aperture_type_macro: {
+            return std::format("{}", aperture_type);
+        } break;
+        default:
+            return std::format("invalid aperture type {}", (int)aperture_type);
+        }
     }
 
     //////////////////////////////////////////////////////////////////////
