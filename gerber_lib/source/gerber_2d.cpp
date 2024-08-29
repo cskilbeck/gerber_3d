@@ -114,6 +114,8 @@ namespace gerber_lib
 
             // check if the arc goes through any cardinal points
 
+            bool full_circle = fabs(end_degrees - start_degrees) >= 360;
+
             double s = fmod(start_degrees, 360.0);
             if(s < 0) {
                 s += 360.0;
@@ -124,6 +126,9 @@ namespace gerber_lib
             }
 
             auto crosses_cardinal = [&](double d) {
+                if(full_circle) {
+                    return true;
+                }
                 if(s <= e) {
                     return s <= d && d < e;
                 }
