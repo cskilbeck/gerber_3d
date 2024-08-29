@@ -43,9 +43,10 @@ namespace gerber_lib
         gerber_aperture_state aperture_state{ aperture_state_off };
         gerber_interpolation interpolation_method{ interpolation_linear };
         gerber_arc circle_segment{};
+        int num_region_points{};
         std::string label;
-        bool hidden{false};
-        int entity_id{0};
+        bool hidden{ false };
+        int entity_id{ 0 };
 
         // these are borrowed...
         gerber_level *level{ nullptr };

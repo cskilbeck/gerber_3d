@@ -49,7 +49,7 @@ namespace gerber_3d
             draw_mode_both = 3
         };
 
-        int draw_mode{ draw_mode_shaded };
+        int draw_mode{ draw_mode_shaded  | draw_mode_wireframe };
 
         enum mouse_drag_action
         {
@@ -71,7 +71,7 @@ namespace gerber_3d
         gerber_lib::gerber_2d::rect drag_rect_raw;
         gerber_lib::gerber_2d::rect drag_rect;
 
-        size_t solid_color_index{ 0 };
+        size_t solid_color_index{ 1 };
 
         int elements_to_hide{ 0 };
 
@@ -155,6 +155,8 @@ namespace gerber_3d
 
         void zoom_image(POINT const &pos, double zoom_scale);
         void set_default_zoom();
+
+        std::string get_open_filename();
 
         LRESULT wnd_proc(UINT message, WPARAM wParam, LPARAM lParam);
         static LRESULT CALLBACK wnd_proc_proxy(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam);

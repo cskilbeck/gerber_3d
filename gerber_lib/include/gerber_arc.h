@@ -26,7 +26,7 @@ namespace gerber_lib
 
         std::string to_string() const
         {
-            return std::format("ARC: POS: {}, SIZE: {}, START: {}, END: {}", pos.to_string(), size.to_string(), start_angle, end_angle);
+            return std::format("ARC: POS: {}, SIZE: {}, START: {}, END: {}", pos, size, start_angle, end_angle);
         }
 
         double sweep_angle() const

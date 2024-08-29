@@ -3,11 +3,14 @@
 #include <algorithm>
 #include <windowsx.h>
 #include "gerber_lib.h"
+#include "gerber_util.h"
 #include "gerber_net.h"
 #include "gerber_enums.h"
 #include "gerber_aperture.h"
 #include "gerber_log.h"
 #include "log_drawer.h"
+
+#include <Commdlg.h>
 
 #pragma comment(lib, "Gdiplus.lib")
 
@@ -305,6 +308,13 @@ namespace gerber_3d
                 redraw();
                 break;
 
+            case 'L': {
+                std::string filename = get_open_filename();
+                if(!filename.empty()) {
+                    LOG_INFO("{}", filename);
+                }
+            } break;
+
             case VK_LEFT:
                 if(highlight_entity) {
                     highlight_entity_id = std::max(0, highlight_entity_id - 1);
@@ -573,7 +583,7 @@ namespace gerber_3d
         w = rc.right - rc.left;
         h = rc.bottom - rc.top;
 
-        hwnd = CreateWindowExA(0, class_name, "Gerber Util", WS_OVERLAPPEDWINDOW, x, y, w, h, NULL, NULL, hInstance, this);
+        hwnd = CreateWindowExA(0, class_name, "Gerber Explorer", WS_OVERLAPPEDWINDOW, x, y, w, h, NULL, NULL, hInstance, this);
 
         ShowWindow(hwnd, SW_SHOW);
         UpdateWindow(hwnd);
@@ -859,37 +869,58 @@ namespace gerber_3d
 
             gerber_net const *net = gerber_file->image.nets[entity.net_index];
 
+            std::string net_info;
+
             std::string aperture_info;
             auto f = gerber_file->image.apertures.find(net->aperture);
             if(f == gerber_file->image.apertures.end()) {
-                aperture_info = std::format("MISSING {}", net->aperture);
+                aperture_info = "None";
             } else {
                 gerber_aperture *aperture = f->second;
-                aperture_info = std::format("{} = D{} - {}", net->aperture, aperture->aperture_number, aperture->aperture_type);
+                aperture_info = std::format("D{} - {}", aperture->aperture_number, aperture->aperture_type);
+                net_info = std::format("At {}", net->end);
+
+                // net->aperture_state should be aperture_state_flash at this point...
             }
 
-            vec2d start_inches{ net->start.x / 25.4, net->start.y / 25.4 };
-            vec2d end_inches{ net->end.x / 25.4, net->end.y / 25.4 };
+            std::string draw;
+            if(net->aperture_state == aperture_state_flash) {
+                draw = "Flash";
+            } else {
+                draw = std::format("{}", net->interpolation_method);
+                switch(net->interpolation_method) {
+                case interpolation_linear:
+                    net_info = std::format("From {}\n  To {}", net->start, net->end);
+                    break;
+                case interpolation_clockwise_circular:
+                case interpolation_counterclockwise_circular:
+                    net_info = std::format("At {}\nRadius {:5.3f}\nFrom {:5.1f}\n  To {:5.1f}", net->circle_segment.pos, net->circle_segment.size.x,
+                                           net->circle_segment.start_angle, net->circle_segment.end_angle);
+                    break;
+                case interpolation_region_start:
+                    net_info = std::format("{} points", net->num_region_points);
+                    break;
+                }
+            }
 
-            std::string text = std::format("Entity {:4d} {}\n"                                   //
-                                           "Aperture {}\n"                                       //
-                                           "Aperture state {}\n"                                 //
-                                           "Interpolation {}\n"                                  //
-                                           "Start {:11.6f},{:11.6f}mm, {:11.6f},{:11.6f}in\n"    //
-                                           "  End {:11.6f},{:11.6f}mm, {:11.6f},{:11.6f}in",
-                                           highlight_entity_id, line,                                     //
-                                           aperture_info,                                                 //
-                                           net->aperture_state,                                           //
-                                           net->interpolation_method,                                     //
-                                           net->start.x, net->start.y, start_inches.x, start_inches.y,    //
-                                           net->end.x, net->end.y,                                        //
-                                           end_inches.x, end_inches.y);
+            std::string text = std::format("Entity {:4d} {}\n"    //
+                                           "Aperture {}\n"        //
+                                           "Draw {}\n"            //
+                                           "{}\n"                 //
+                                           "Polarity {}\n"        //
+                                           ,
+                                           highlight_entity_id, line,    //
+                                           aperture_info,                //
+                                           draw,                         //
+                                           net_info,                     //
+                                           net->level->polarity);
 
             std::wstring wide_text = utf16_from_utf8(text);
 
             PointF origin{ 10, 10 };
             RectF bounding_box;
             graphics->MeasureString(wide_text.c_str(), (INT)text.size(), info_text_font, origin, &bounding_box);
+            bounding_box.Width += 10;
 
             graphics->FillRectangle(info_text_background_brush, bounding_box);
 
@@ -907,6 +938,32 @@ namespace gerber_3d
         if(hwnd != nullptr) {
             release_gdi_resources();
         }
+    }
+
+    //////////////////////////////////////////////////////////////////////
+
+    std::string gdi_drawer::get_open_filename()
+    {
+        // open a file name
+        char filename[MAX_PATH] = {};
+        OPENFILENAME ofn{ 0 };
+        ZeroMemory(&ofn, sizeof(ofn));
+        ofn.lStructSize = sizeof(ofn);
+        ofn.hwndOwner = NULL;
+        ofn.lpstrFile = filename;
+        ofn.lpstrFile[0] = '\0';
+        ofn.nMaxFile = (DWORD)array_length(filename);
+        ofn.lpstrFilter = "All files\0*.*\0";
+        ofn.nFilterIndex = 1;
+        ofn.lpstrFileTitle = NULL;
+        ofn.nMaxFileTitle = 0;
+        ofn.lpstrInitialDir = NULL;
+        ofn.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST;
+
+        if(GetOpenFileNameA(&ofn)) {
+            return filename;
+        }
+        return std::string{};
     }
 
 }    // namespace gerber_3d

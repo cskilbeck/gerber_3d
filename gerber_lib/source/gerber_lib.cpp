@@ -16,7 +16,7 @@
 #include "gerber_image.h"
 #include "gerber_reader.h"
 
-LOG_CONTEXT("gerber_lib", debug);
+LOG_CONTEXT("gerber_lib", verbose);
 
 namespace
 {
@@ -1793,6 +1793,7 @@ namespace gerber_lib
 
                 case interpolation_region_end: {
                     state.region_start_node->bounding_box = bounding_box;    // Save the calculated bounding box to the start node.
+                    state.region_start_node->num_region_points = region_points;
                     state.region_start_node = nullptr;
                     state.is_region_fill = false;
                     region_points = 0;
@@ -1824,6 +1825,7 @@ namespace gerber_lib
                     if(state.aperture_state == aperture_state_off && state.interpolation != interpolation_region_start && region_points > 0) {
 
                         net->interpolation_method = interpolation_region_end;
+                        state.region_start_node->num_region_points = region_points;
 
                         net = new gerber_net(&image, net, state.level, state.net_state);
                         net->entity_id = current_entity_id;
@@ -2499,7 +2501,7 @@ namespace gerber_lib
         gerber_timer interim_timer;
 
         if(drawer.show_progress) {
-            LOG_DEBUG("DRAW BEGINS, {} nets", num_nets);
+            LOG_VERBOSE("DRAW BEGINS, {} nets", num_nets);
             timer.reset();
             interim_timer.reset();
         }
@@ -2509,7 +2511,7 @@ namespace gerber_lib
             if(drawer.show_progress) {
                 double new_percent = net_index * 100.0 / num_nets;
                 if((new_percent - percent) >= 1 || interim_timer.elapsed_seconds() > 1) {
-                    LOG_DEBUG("{:5.2f}% ({} of {} nets)", new_percent, net_index, num_nets);
+                    LOG_VERBOSE("{:5.2f}% ({} of {} nets)", new_percent, net_index, num_nets);
                     percent = new_percent;
                     interim_timer.reset();
                 }
@@ -2633,7 +2635,7 @@ namespace gerber_lib
                             } else {
                                 if(!should_hide(hide_element_lines)) {
                                     if(aperture->aperture_type != aperture_type_circle) {
-                                        LOG_INFO("{}", aperture->aperture_type);
+                                        LOG_DEBUG("{}", aperture->aperture_type);
                                     }
                                     CHECK(draw_linear_interpolation(drawer, net, aperture));
                                 }

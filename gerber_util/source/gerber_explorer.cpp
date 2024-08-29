@@ -9,7 +9,7 @@
 #include "gdi_drawer.h"
 #include "occ_drawer.h"
 
-#define SHOW_3D
+// #define SHOW_3D
 #define SHOW_GDI
 
 //////////////////////////////////////////////////////////////////////
@@ -46,13 +46,13 @@ int main()
     // char const *filename = "gerber_test_files\\buck4_Copper_Signal_Top.gbr";
     // char const *filename = "gerber_test_files\\wch554g_Copper_Signal_Bot.gbr";
     // char const *filename = "gerber_test_files\\clock_Copper_Signal_Bot.gbr";
-    // char const *filename = "gerber_test_files\\clock_Copper_Signal_Top.gbr";
+    char const *filename = "gerber_test_files\\clock_Copper_Signal_Top.gbr";
 
     // char const *filename = "gerber_test_files\\SMD_prim_21.gbr";
     // char const *filename = "gerber_test_files\\SMD_prim_21_single.gbr";
     // char const *filename = "gerber_test_files\\region.gbr";
 
-    char const *filename = "gerber_test_files\\arc_1.gbr";
+    // char const *filename = "gerber_test_files\\arc_1.gbr";
     // char const *filename = "gerber_test_files\\arc_2.gbr";
     // char const *filename = "gerber_test_files\\arc_3.gbr";
     // char const *filename = "gerber_test_files\\arc_4.gbr";

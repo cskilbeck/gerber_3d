@@ -82,10 +82,17 @@ namespace gerber_lib
 
             std::string to_string() const
             {
-                return std::format("({},{})", x, y);
+                return std::format("(X:{:7.3f},Y:{:7.3f})", x, y);
             }
         };
+    }
+}
+GERBER_MAKE_FORMATTER(gerber_lib::gerber_2d::vec2d);
 
+namespace gerber_lib
+{
+    namespace gerber_2d
+    {
         //////////////////////////////////////////////////////////////////////
 
         struct rect
@@ -97,7 +104,7 @@ namespace gerber_lib
 
             std::string to_string() const
             {
-                return std::format("{}..{}", min_pos.to_string(), max_pos.to_string());
+                return std::format("(MIN:{} MAX:{})", min_pos, max_pos);
             }
 
             //////////////////////////////////////////////////////////////////////
@@ -216,7 +223,6 @@ namespace gerber_lib
 
 }    // namespace gerber_lib
 
-GERBER_MAKE_FORMATTER(gerber_lib::gerber_2d::vec2d);
 GERBER_MAKE_FORMATTER(gerber_lib::gerber_2d::rect);
 GERBER_MAKE_FORMATTER(gerber_lib::gerber_2d::matrix);
 

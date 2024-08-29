@@ -10,7 +10,7 @@ G04 Layer_Color=255*
 G01*
 G75*
 %TA.AperFunction,NonConductor*%
-%ADD10C,0.010000*%
+%ADD10C,0.050000*%
 D10*
 X-94910Y-64939D02*
 G03*

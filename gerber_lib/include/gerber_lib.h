@@ -49,6 +49,13 @@ namespace gerber_lib
 
         int current_net_id{};
 
+        gerber_stats stats{};
+        gerber_image image{};
+        gerber_state state{};
+        gerber_reader reader{};
+
+        std::vector<gerber_entity> entities;
+
         bool is_gerber_274d(std::string file_path)
         {
             return false;
@@ -94,14 +101,9 @@ namespace gerber_lib
 
         void update_knockout_measurements();
 
-        gerber_stats stats{};
-        gerber_image image{};
-        gerber_state state{};
-        gerber_reader reader{};
-
-        std::vector<gerber_entity> entities;
-
         gerber() = default;
+
+        ~gerber() = default;
     };
 
 }    // namespace gerber_lib
