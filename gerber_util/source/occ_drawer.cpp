@@ -191,6 +191,9 @@ namespace gerber_3d
             case draw_element_arc: {
                 double start = deg_2_rad(e.start_degrees);
                 double end = deg_2_rad(e.end_degrees);
+                if(end < start) {
+                    std::swap(start, end);
+                }
                 gp_Circ circle;
                 circle.SetLocation(gp_Pnt(e.arc_center.x, e.arc_center.y, 0));
                 circle.SetRadius(e.radius);

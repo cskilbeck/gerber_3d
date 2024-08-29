@@ -2382,8 +2382,8 @@ namespace gerber_lib
                 // no overlap, just draw the inner, outer and end caps
                 add_arc(pos, outer_radius, start_angle, end_angle);
                 add_arc(end_pos, r, end_angle, end_angle + 180);
-                add_arc(pos, inner_radius, start_angle, end_angle);
-                add_arc(start_pos, r, start_angle - 180, start_angle);
+                add_arc(pos, inner_radius, end_angle, start_angle);
+                add_arc(start_pos, r, start_angle-180, start_angle);
 
             } else {
 
@@ -2412,7 +2412,7 @@ namespace gerber_lib
                 if(radius > r) {
 
                     add_arc(end_pos, r, outer_degrees + 180, end_angle + 180);
-                    add_arc(pos, inner_radius, start_angle, end_angle);
+                    add_arc(pos, inner_radius, end_angle, start_angle);
                     add_arc(start_pos, r, start_angle + 180, inner_degrees);
                 }
             }
