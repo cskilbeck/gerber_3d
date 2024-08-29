@@ -37,8 +37,8 @@ namespace
 
 namespace gerber_3d
 {
-    Color const gdi_drawer::background_color{ 255, 255, 240, 224 };
     Color const gdi_drawer::gerber_fill_color[2] = { Color(255, 64, 128, 32), Color(128, 64, 128, 32) };
+    Color const gdi_drawer::gerber_clear_color[2] = { Color(255, 255, 240, 224), Color(128, 255, 240, 224) };
     Color const gdi_drawer::highlight_color_fill{ 64, 0, 255, 255 };
     Color const gdi_drawer::highlight_color_clear{ 64, 255, 0, 255 };
     Color const gdi_drawer::axes_color{ 255, 0, 0, 0 };
@@ -693,7 +693,8 @@ namespace gerber_3d
         origin_pen = new Pen(origin_color, 0);
         fill_brush[0] = new SolidBrush(gerber_fill_color[0]);
         fill_brush[1] = new SolidBrush(gerber_fill_color[1]);
-        clear_brush = new SolidBrush(background_color);
+        clear_brush[0] = new SolidBrush(gerber_clear_color[0]);
+        clear_brush[1] = new SolidBrush(gerber_clear_color[1]);
         red_fill_brush = new SolidBrush(Color(64, 255, 0, 0));
         highlight_fill_brush = new SolidBrush(highlight_color_fill);
         highlight_clear_brush = new SolidBrush(highlight_color_clear);
@@ -722,7 +723,8 @@ namespace gerber_3d
         safe_delete(graphics);
         safe_delete(fill_brush[0]);
         safe_delete(fill_brush[1]);
-        safe_delete(clear_brush);
+        safe_delete(clear_brush[0]);
+        safe_delete(clear_brush[1]);
         safe_delete(red_fill_brush);
         safe_delete(highlight_fill_brush);
         safe_delete(highlight_clear_brush);
@@ -767,7 +769,7 @@ namespace gerber_3d
                 if(entity.fill) {
                     brush = fill_brush[solid_color_index];
                 } else {
-                    brush = clear_brush;
+                    brush = clear_brush[solid_color_index];
                 }
             }
 
@@ -821,7 +823,7 @@ namespace gerber_3d
 
         graphics->ResetTransform();
 
-        graphics->FillRectangle(clear_brush, 0, 0, (INT)window_size.x, (INT)window_size.y);
+        graphics->FillRectangle(clear_brush[0], 0, 0, (INT)window_size.x, (INT)window_size.y);
 
         matrix mat = get_transform_matrix();
 

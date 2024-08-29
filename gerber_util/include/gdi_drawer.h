@@ -85,11 +85,11 @@ namespace gerber_3d
         static Color const axes_color;
         static Color const origin_color;
         static Color const extent_color;
-        static Color const background_color;
         static Color const select_outline_color;
         static Color const select_fill_color;
         static Color const select_whole_fill_color;
         static Color const gerber_fill_color[2];
+        static Color const gerber_clear_color[2];
         static Color const highlight_color_fill;
         static Color const highlight_color_clear;
         static Color const info_text_background_color;
@@ -108,7 +108,7 @@ namespace gerber_3d
         Brush *select_fill_brush{ nullptr };
         Brush *select_whole_fill_brush{ nullptr };
         Brush *fill_brush[2]{ nullptr, nullptr };
-        Brush *clear_brush{ nullptr };
+        Brush *clear_brush[2]{ nullptr };
         Brush *red_fill_brush{ nullptr };
         Brush *highlight_fill_brush{ nullptr };
         Brush *highlight_clear_brush{ nullptr };
