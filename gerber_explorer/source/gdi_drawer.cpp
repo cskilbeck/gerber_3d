@@ -39,6 +39,32 @@ namespace
         return POINT{ GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
     }
 
+    //////////////////////////////////////////////////////////////////////
+    // this assumes CCW winding order (which GDI+ seems to use)
+
+    bool is_point_in_polygon(PointF const *polygon_points, size_t num_polygon_points, PointF const &p)
+    {
+        bool inside = false;
+
+        for(size_t i = 0, j = num_polygon_points - 1; i < num_polygon_points; j = i++) {
+
+            PointF const &a = polygon_points[i];
+            PointF const &b = polygon_points[j];
+
+            // if the line straddles the point in the vertical direction
+            if((a.Y > p.Y) != (b.Y > p.Y)) {
+
+                // check if a horizontal line from the point crosses the line
+                if((p.X < (b.X - a.X) * (p.Y - a.Y) / (b.Y - a.Y) + a.X)) {
+
+                    inside = !inside;
+                }
+            }
+        }
+
+        return inside;
+    }
+
 };    // namespace
 
 namespace gerber_3d
@@ -220,23 +246,24 @@ namespace gerber_3d
 
         PointF gdi_point((REAL)img.x, (REAL)img.y);
 
-        LOG_INFO("Checking {} entities", gdi_entities.size());
+        LOG_DEBUG("Checking {} entities", gdi_entities.size());
 
         for(auto const &entity : gdi_entities) {
 
             if(entity.bounds.Contains(gdi_mouse_mos)) {
 
-                LOG_INFO("  Checking entity {} ({} paths)", entity.entity_id, entity.num_paths);
+                LOG_DEBUG("  Checking entity {} ({} paths)", entity.entity_id, entity.num_paths);
 
                 int path_id = entity.path_id;
 
                 for(int n = 0; n < entity.num_paths; ++n) {
 
-                    GraphicsPath *path = gdi_paths[path_id];
+                    std::vector<PointF> const &gdi_points = gdi_point_lists[path_id];
 
-                    LOG_INFO("    Path {} has {} points", path_id, path->GetPointCount());
+                    LOG_DEBUG("    Path {} has {} points", path_id, gdi_points.size());
 
-                    if(path->IsVisible(gdi_point, graphics)) {
+                    if(is_point_in_polygon(gdi_points.data(), gdi_points.size(), gdi_point)) {
+
                         LOG_DEBUG("ENTITY {} is visible via PATH {}", entity_id, path_id);
                         entities.push_back(entity_id);
                         break;
@@ -246,6 +273,7 @@ namespace gerber_3d
             }
             entity_id += 1;
         }
+        graphics->Flush();
 
         // Clicked on nothing?
         if(entities.empty()) {
@@ -728,6 +756,16 @@ namespace gerber_3d
             }
         }
         p->CloseAllFigures();
+
+        std::unique_ptr<GraphicsPath> flattened_path(p->Clone());
+        flattened_path->Flatten(nullptr, 0.005f);
+        int num_points = flattened_path->GetPointCount();
+        gdi_point_lists.push_back(std::vector<PointF>());
+        gdi_point_lists.back().resize(num_points);
+        flattened_path->GetPathPoints(gdi_point_lists.back().data(), num_points);
+
+        // now add all the flattened points to the big bad array of points
+
         RectF bounds;
         p->GetBounds(&bounds, nullptr, nullptr);
         if(entity.bounds.IsEmptyArea()) {
@@ -1058,10 +1096,15 @@ namespace gerber_3d
 
     void gdi_drawer::cleanup()
     {
-        while(!gdi_paths.empty()) {
-            delete gdi_paths.back();
-            gdi_paths.pop_back();
+        for(auto p : gdi_point_lists) {
+            p.clear();
         }
+        gdi_point_lists.clear();
+
+        for(auto p : gdi_paths) {
+            delete p;
+        }
+        gdi_paths.clear();
         gdi_entities.clear();
         entities_clicked.clear();
         selected_entity_index = 0;

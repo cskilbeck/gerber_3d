@@ -39,6 +39,7 @@ namespace gerber_3d
         using Brush = Gdiplus::Brush;
         using Font = Gdiplus::Font;
         using RectF = Gdiplus::RectF;
+        using PointF = Gdiplus::PointF;
 
         ULONG_PTR gdiplus_token{};
 
@@ -148,6 +149,7 @@ namespace gerber_3d
 
         std::vector<GraphicsPath *> gdi_paths;
         std::vector<gdi_entity> gdi_entities;
+        std::vector<std::vector<PointF>> gdi_point_lists;
 
         std::vector<int> entities_clicked;
         size_t selected_entity_index;
