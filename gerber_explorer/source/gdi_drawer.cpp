@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <windowsx.h>
 #include "gerber_lib.h"
+#include "gerber_settings.h"
 #include "gerber_util.h"
 #include "gerber_net.h"
 #include "gerber_enums.h"
@@ -283,6 +284,10 @@ namespace gerber_3d
         case WM_CREATE: {
             Gdiplus::GdiplusStartupInput gdiplusStartupInput;
             GdiplusStartup(&gdiplus_token, &gdiplusStartupInput, NULL);
+            load_bool("show_axes", show_axes);
+            load_bool("show_extent", show_extent);
+            load_bool("show_origin", show_origin);
+            load_int("draw_mode", draw_mode);
         } break;
 
 
@@ -1027,6 +1032,10 @@ namespace gerber_3d
 
     void gdi_drawer::cleanup()
     {
+        save_bool("show_axes", show_axes);
+        save_bool("show_extent", show_extent);
+        save_bool("show_origin", show_origin);
+        save_int("draw_mode", draw_mode);
         if(hwnd != nullptr) {
             release_gdi_resources();
         }

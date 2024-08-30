@@ -2,6 +2,8 @@
 
 #if defined(WIN32)
 #include <Windows.h>
+#include <Shlobj.h>
+
 #endif
 
 #include <format>
@@ -18,12 +20,30 @@ namespace gerber_util
 
     namespace
     {
-        std::string ini_filename = std::filesystem::absolute("gerber_explorer.ini").string();
-    }
+        //////////////////////////////////////////////////////////////////////
+
+        std::string get_ini_filename()
+        {
+            static std::string ini_filename;
+
+            if(ini_filename.empty()) {
+                char path[MAX_PATH + 1];
+                if(!SHGetSpecialFolderPathA(HWND_DESKTOP, path, CSIDL_LOCAL_APPDATA, FALSE)) {
+                    MessageBox(nullptr, "Fatal error, can't get application data folder!?", "Gerber Explorer", MB_ICONEXCLAMATION);
+                    ExitProcess(1);
+                }
+                ini_filename = std::format("{}\\gerber_explorer.ini", path);
+            }
+            return ini_filename;
+        }
+
+    }    // namespace
+
+    //////////////////////////////////////////////////////////////////////
 
     bool save_string(std::string const &name, std::string const &value)
     {
-        return WritePrivateProfileStringA("GerberExplorer", name.c_str(), value.c_str(), ini_filename.c_str()) != 0;
+        return WritePrivateProfileStringA("GerberExplorer", name.c_str(), value.c_str(), get_ini_filename().c_str()) != 0;
     }
 
     //////////////////////////////////////////////////////////////////////
@@ -31,7 +51,8 @@ namespace gerber_util
     bool load_string(std::string const &name, std::string &value)
     {
         char buffer[256];
-        DWORD got = GetPrivateProfileStringA("GerberExplorer", name.c_str(), nullptr, buffer, (DWORD)gerber_util::array_length(buffer), ini_filename.c_str());
+        DWORD got =
+            GetPrivateProfileStringA("GerberExplorer", name.c_str(), nullptr, buffer, (DWORD)gerber_util::array_length(buffer), get_ini_filename().c_str());
         if(got != 0) {
             value = std::string(buffer, got);
             return true;
@@ -47,11 +68,11 @@ namespace gerber_util
 
     //////////////////////////////////////////////////////////////////////
 
-    bool load_int64(std::string const &name, int64_t &value)
+    bool load_int(std::string const &name, int &value)
     {
         std::string d;
         if(load_string(name, d)) {
-            value = _strtoi64(d.c_str(), nullptr, 10);
+            value = (int)_strtoi64(d.c_str(), nullptr, 10);
             return true;
         }
         return false;
@@ -83,7 +104,7 @@ namespace gerber_util
 
     //////////////////////////////////////////////////////////////////////
 
-    bool save_int64(std::string const &name, int64_t value)
+    bool save_int(std::string const &name, int value)
     {
         return save_string(name, std::format("{}", value));
     }
