@@ -25,6 +25,7 @@ LOG_CONTEXT("gerber_lib", verbose);
 namespace
 {
     using namespace gerber_lib;
+    using namespace gerber_util;
     using namespace gerber_2d;
 
     int hide_elements = 0

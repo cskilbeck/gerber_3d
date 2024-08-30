@@ -22,6 +22,7 @@ namespace
     HINSTANCE hInstance{ NULL };
     constexpr char const *class_name = "Gerber_Util_Window_Class";
 
+    using namespace gerber_util;
     using namespace gerber_lib;
     using namespace gerber_2d;
 

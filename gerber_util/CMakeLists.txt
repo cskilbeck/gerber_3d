@@ -1,12 +1,12 @@
-file(GLOB_RECURSE LIB_SOURCES "source/*.cpp")
-file(GLOB_RECURSE LIB_HEADERS "include/*.h")
+file(GLOB_RECURSE UTIL_SOURCES "source/*.cpp")
+file(GLOB_RECURSE UTIL_HEADERS "include/*.h")
 
-add_library(gerber_lib
-    ${LIB_SOURCES}
-    ${LIB_HEADERS}
+add_library(gerber_util
+    ${UTIL_SOURCES}
+    ${UTIL_HEADERS}
 )
 
-target_include_directories(gerber_lib PUBLIC
+target_include_directories(gerber_util PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>
 )
@@ -19,14 +19,12 @@ if(MSVC)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /D_SILENCE_CXX17_CODECVT_HEADER_DEPRECATION_WARNING")
 endif()
 
-target_link_libraries(gerber_lib PRIVATE gerber_util)
-
 if(MSVC)
-  target_compile_options(gerber_lib PRIVATE /W4 /WX)
+  target_compile_options(gerber_util PRIVATE /W4 /WX)
 else()
-  target_compile_options(gerber_lib PRIVATE -Wall -Wextra -Wpedantic -Werror)
+  target_compile_options(gerber_util PRIVATE -Wall -Wextra -Wpedantic -Werror)
 endif()
 
-target_compile_features(gerber_lib PUBLIC cxx_std_20)
+target_compile_features(gerber_util PUBLIC cxx_std_20)
 
-source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR} FILES ${LIB_SOURCES} ${LIB_HEADERS})
+source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR} FILES ${UTIL_SOURCES} ${UTIL_HEADERS})

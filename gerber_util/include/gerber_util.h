@@ -7,7 +7,7 @@
 #include <map>
 #include <chrono>
 
-namespace gerber_lib
+namespace gerber_util
 {
     //////////////////////////////////////////////////////////////////////
 

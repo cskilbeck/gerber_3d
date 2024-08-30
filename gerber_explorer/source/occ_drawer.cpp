@@ -139,7 +139,7 @@ namespace gerber_3d
             double const depth = 0.5;
             // double const depth = 1.0;
 
-            gerber_timer t;
+            gerber_util::gerber_timer t;
 
             LOG_DEBUG("BRepPrimAPI_MakePrism begins");
             t.reset();

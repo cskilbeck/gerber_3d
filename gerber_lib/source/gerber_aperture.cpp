@@ -15,6 +15,7 @@ LOG_CONTEXT("aperture", debug);
 namespace
 {
     using namespace gerber_lib;
+    using namespace gerber_util;
 
     //////////////////////////////////////////////////////////////////////
 
