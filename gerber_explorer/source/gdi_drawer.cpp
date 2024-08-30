@@ -224,35 +224,36 @@ namespace gerber_3d
 
     void gdi_drawer::on_left_click(POINT const &mouse_pos)
     {
-        LOG_CONTEXT("pick", info);
+        LOG_CONTEXT("pick", debug);
 
         if(gerber_file == nullptr) {
             return;
         }
 
         // Get click position in world coordinates
-        vec2d img = world_pos_from_window_pos(mouse_pos);
-        PointF gdi_mouse_mos{ (REAL)img.x, (REAL)img.y };
+        //vec2d img = world_pos_from_window_pos(mouse_pos);
+        //PointF gdi_mouse_mos{ (REAL)img.x, (REAL)img.y };
+        PointF gdi_mouse_pos{ (REAL)mouse_pos.x, (REAL)mouse_pos.y };
 
         // Scale the transform because the default pen width is 1.0 which is a whole mm
         // Note the gdi_point will also get scaled by the transform so no need to scale the input point
-        Matrix m;
-        m.Scale(1000, 1000);
-        graphics->SetTransform(&m);
+        //Matrix m;
+        //m.Scale(1000, 1000);
+        //graphics->SetTransform(&m);
 
         // Build list of entities under that point
         std::vector<int> entities;
         int entity_id = 0;
 
-        PointF gdi_point((REAL)img.x, (REAL)img.y);
+        // PointF gdi_point((REAL)img.x, (REAL)img.y);
 
-        LOG_DEBUG("Checking {} entities", gdi_entities.size());
+        LOG_DEBUG("There are {} entities", gdi_entities.size());
 
         for(auto const &entity : gdi_entities) {
 
-            if(entity.bounds.Contains(gdi_mouse_mos)) {
+            if(entity.bounds.Contains(gdi_mouse_pos)) {
 
-                LOG_DEBUG("  Checking entity {} ({} paths)", entity.entity_id, entity.num_paths);
+                LOG_DEBUG("      Checking entity {} ({} paths)", entity.entity_id, entity.num_paths);
 
                 int path_id = entity.path_id;
 
@@ -260,11 +261,11 @@ namespace gerber_3d
 
                     std::vector<PointF> const &gdi_points = gdi_point_lists[path_id];
 
-                    LOG_DEBUG("    Path {} has {} points", path_id, gdi_points.size());
+                    LOG_DEBUG("      Path {} has {} points", path_id, gdi_points.size());
 
-                    if(is_point_in_polygon(gdi_points.data(), gdi_points.size(), gdi_point)) {
+                    if(is_point_in_polygon(gdi_points.data(), gdi_points.size(), gdi_mouse_pos)) {
 
-                        LOG_DEBUG("ENTITY {} is visible via PATH {}", entity_id, path_id);
+                        LOG_DEBUG("         -> ENTITY {} is visible via PATH {}", entity_id, path_id);
                         entities.push_back(entity_id);
                         break;
                     }
@@ -737,7 +738,7 @@ namespace gerber_3d
             gdi_entities.back().num_paths += 1;
         }
 
-        auto &entity = gdi_entities.back();
+        // auto &entity = gdi_entities.back();
 
         for(size_t n = 0; n < num_elements; ++n) {
 
@@ -756,23 +757,6 @@ namespace gerber_3d
             }
         }
         p->CloseAllFigures();
-
-        std::unique_ptr<GraphicsPath> flattened_path(p->Clone());
-        flattened_path->Flatten(nullptr, 0.005f);
-        int num_points = flattened_path->GetPointCount();
-        gdi_point_lists.push_back(std::vector<PointF>());
-        gdi_point_lists.back().resize(num_points);
-        flattened_path->GetPathPoints(gdi_point_lists.back().data(), num_points);
-
-        // now add all the flattened points to the big bad array of points
-
-        RectF bounds;
-        p->GetBounds(&bounds, nullptr, nullptr);
-        if(entity.bounds.IsEmptyArea()) {
-            entity.bounds = bounds;
-        } else {
-            RectF::Union(entity.bounds, entity.bounds, bounds);
-        }
     }
 
     //////////////////////////////////////////////////////////////////////
@@ -949,6 +933,35 @@ namespace gerber_3d
         // draw the whole thing
 
         draw_all_entities();
+
+        // get screen-space polygons and bounding rect for each path
+
+        for(auto p : gdi_point_lists) {
+            p.clear();
+        }
+        gdi_point_lists.clear();
+
+        for(auto &entity : gdi_entities) {
+
+            int path_id = entity.path_id;
+            int last_path = entity.num_paths + path_id;
+            entity.bounds = RectF{0,0,0,0};
+            for(; path_id != last_path; ++path_id) {
+                std::unique_ptr<GraphicsPath> flattened_path(gdi_paths[path_id]->Clone());
+                flattened_path->Flatten(&gdi_matrix, 2);// 2 pixel tolerance to reduce the # of points on curves
+                int num_points = flattened_path->GetPointCount();
+                gdi_point_lists.push_back(std::vector<PointF>());
+                gdi_point_lists.back().resize(num_points);
+                flattened_path->GetPathPoints(gdi_point_lists.back().data(), num_points);
+                RectF bounds;
+                gdi_paths[path_id]->GetBounds(&bounds, &gdi_matrix, nullptr);
+                if(entity.bounds.IsEmptyArea()) {
+                    entity.bounds = bounds;
+                } else {
+                    RectF::Union(entity.bounds, entity.bounds, bounds);
+                }
+            }
+        }
 
         // gerber_file->draw(*this, elements_to_hide);
 
