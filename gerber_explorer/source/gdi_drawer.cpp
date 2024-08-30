@@ -79,15 +79,20 @@ namespace gerber_3d
         double gerber_aspect = gerber_width / gerber_height;    // aspect ratio of gerber
 
         if(gerber_aspect > window_aspect) {
+
             image_size_px.x = window_size.x;
             image_size_px.y = window_size.x / gerber_aspect;
+
             image_pos_px.x = 0;
             image_pos_px.y = (window_size.y - image_size_px.y) / 2.0;
+
         } else {
-            image_size_px.y = window_size.y;
+
             image_size_px.x = window_size.y * gerber_aspect;
-            image_pos_px.y = 0;
+            image_size_px.y = window_size.y;
+
             image_pos_px.x = (window_size.x - image_size_px.x) / 2.0;
+            image_pos_px.y = 0;
         }
     }
 
@@ -131,16 +136,10 @@ namespace gerber_3d
 
         if(gerber_file != nullptr) {
 
+            cleanup();
             set_default_zoom();
-            while(!gdi_paths.empty()) {
-                delete gdi_paths.back();
-                gdi_paths.pop_back();
-            }
-            gdi_entities.clear();
+
             gerber_file->draw(*this);
-            entities_clicked.clear();
-            selected_entity_index = 0;
-            highlight_entity = false;
         }
         redraw();
     }
@@ -284,10 +283,7 @@ namespace gerber_3d
         case WM_CREATE: {
             Gdiplus::GdiplusStartupInput gdiplusStartupInput;
             GdiplusStartup(&gdiplus_token, &gdiplusStartupInput, NULL);
-            load_bool("show_axes", show_axes);
-            load_bool("show_extent", show_extent);
-            load_bool("show_origin", show_origin);
-            load_int("draw_mode", draw_mode);
+            load_settings();
         } break;
 
 
@@ -618,9 +614,11 @@ namespace gerber_3d
             //////////////////////////////////////////////////////////////////////
 
         case WM_DESTROY:
-            release_gdi_resources();
+            cleanup();
             Gdiplus::GdiplusShutdown(gdiplus_token);
+            gdiplus_token = 0;
             hwnd = nullptr;
+            save_settings();
             PostQuitMessage(0);
             break;
 
@@ -630,6 +628,26 @@ namespace gerber_3d
             return DefWindowProcA(hwnd, message, wParam, lParam);
         }
         return 0;
+    }
+
+    //////////////////////////////////////////////////////////////////////
+
+    void gdi_drawer::save_settings() const
+    {
+        save_bool("show_axes", show_axes);
+        save_bool("show_extent", show_extent);
+        save_bool("show_origin", show_origin);
+        save_int("draw_mode", draw_mode);
+    }
+
+    //////////////////////////////////////////////////////////////////////
+
+    void gdi_drawer::load_settings()
+    {
+        load_bool("show_axes", show_axes);
+        load_bool("show_extent", show_extent);
+        load_bool("show_origin", show_origin);
+        load_int("draw_mode", draw_mode);
     }
 
     //////////////////////////////////////////////////////////////////////
@@ -1032,13 +1050,16 @@ namespace gerber_3d
 
     void gdi_drawer::cleanup()
     {
-        save_bool("show_axes", show_axes);
-        save_bool("show_extent", show_extent);
-        save_bool("show_origin", show_origin);
-        save_int("draw_mode", draw_mode);
-        if(hwnd != nullptr) {
-            release_gdi_resources();
+        while(!gdi_paths.empty()) {
+            delete gdi_paths.back();
+            gdi_paths.pop_back();
         }
+        gdi_entities.clear();
+        entities_clicked.clear();
+        selected_entity_index = 0;
+        highlight_entity = false;
+
+        release_gdi_resources();
     }
 
     //////////////////////////////////////////////////////////////////////

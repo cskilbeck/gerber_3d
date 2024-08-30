@@ -42,6 +42,9 @@ namespace gerber_3d
 
         ULONG_PTR gdiplus_token{};
 
+        void save_settings() const;
+        void load_settings();
+
         gerber_lib::gerber_2d::vec2d image_pos_px{};    // image position on screen in pixels
         gerber_lib::gerber_2d::vec2d image_size_px{};   // image size on screen in pixels
 
