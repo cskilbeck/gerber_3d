@@ -1,12 +1,14 @@
-file(GLOB_RECURSE LIB_SOURCES "source/*.cpp")
-file(GLOB_RECURSE LIB_HEADERS "include/*.h")
+set(PROJECT gerber_lib)
 
-add_library(gerber_lib
-    ${LIB_SOURCES}
-    ${LIB_HEADERS}
+file(GLOB_RECURSE PROJECT_SOURCES "source/*.cpp")
+file(GLOB_RECURSE PROJECT_HEADERS "include/*.h")
+
+add_library(${PROJECT}
+    ${PROJECT_SOURCES}
+    ${PROJECT_HEADERS}
 )
 
-target_include_directories(gerber_lib PUBLIC
+target_include_directories(${PROJECT} PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>
 )
@@ -17,16 +19,13 @@ if(MSVC)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /wd4100")   # unreferenced formal parameter
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /wd4505")   # unreferenced function with internal linkage has been removed
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /D_SILENCE_CXX17_CODECVT_HEADER_DEPRECATION_WARNING")
-endif()
-
-target_link_libraries(gerber_lib PRIVATE gerber_util)
-
-if(MSVC)
-  target_compile_options(gerber_lib PRIVATE /W4 /WX)
+    target_compile_options(${PROJECT} PRIVATE /W4 /WX)
 else()
-  target_compile_options(gerber_lib PRIVATE -Wall -Wextra -Wpedantic -Werror)
+    target_compile_options(${PROJECT} PRIVATE -Wall -Wextra -Wpedantic -Werror)
 endif()
 
-target_compile_features(gerber_lib PUBLIC cxx_std_20)
+target_compile_features(${PROJECT} PUBLIC cxx_std_20)
 
-source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR} FILES ${LIB_SOURCES} ${LIB_HEADERS})
+source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR} FILES ${PROJECT_SOURCES} ${PROJECT_HEADERS})
+
+target_link_libraries(${PROJECT} PRIVATE gerber_util)
