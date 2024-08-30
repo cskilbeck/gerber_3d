@@ -236,8 +236,6 @@ namespace gerber_3d
         std::vector<int> entities;
         int entity_id = 0;
 
-        // PointF gdi_point((REAL)img.x, (REAL)img.y);
-
         LOG_DEBUG("There are {} entities", gdi_entities.size());
 
         for(auto const &entity : gdi_entities) {
@@ -252,11 +250,11 @@ namespace gerber_3d
 
                     std::vector<PointF> const &gdi_points = gdi_point_lists[path_id];
 
-                    LOG_DEBUG("      Path {} has {} points", path_id, gdi_points.size());
+                    LOG_DEBUG("          Path {} has {} points", path_id, gdi_points.size());
 
                     if(is_point_in_polygon(gdi_points.data(), gdi_points.size(), gdi_mouse_pos)) {
 
-                        LOG_DEBUG("         -> ENTITY {} is visible via PATH {}", entity_id, path_id);
+                        LOG_DEBUG("              -> ENTITY {} is visible via PATH {}", entity_id, path_id);
                         entities.push_back(entity_id);
                         break;
                     }
@@ -265,29 +263,20 @@ namespace gerber_3d
             }
             entity_id += 1;
         }
-        graphics->Flush();
 
-        // Clicked on nothing?
-        if(entities.empty()) {
-            LOG_DEBUG("No entites found at {},{}", mouse_pos.x, mouse_pos.y);
-            highlight_entity = false;
-            return;
-        }
+        // Clicked on something?
+        highlight_entity = !entities.empty();
 
-        // Different set, reset the cycling index
-        if(entities != entities_clicked) {
-            entities_clicked = entities;
-            selected_entity_index = entities_clicked.size() - 1;
-            highlight_entity = true;
-            highlight_entity_id = entities_clicked[selected_entity_index];
-        } else {
-            // Same set, cycle to the next entity
-            if(selected_entity_index != 0) {
-                selected_entity_index -= 1;
-            } else {
+        if(highlight_entity) {
+
+            if(entities != entities_clicked) {
+                // Different set, save the new list and reset the cycling index
+                entities_clicked = entities;
                 selected_entity_index = entities_clicked.size() - 1;
+            } else {
+                // Same set, cycle to the next entity down
+                selected_entity_index = std::min(selected_entity_index - 1, entities_clicked.size() - 1);
             }
-            highlight_entity = true;
             highlight_entity_id = entities_clicked[selected_entity_index];
         }
     }
