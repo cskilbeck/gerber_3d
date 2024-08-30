@@ -370,6 +370,14 @@ namespace gerber_3d
                 }
             } break;
 
+            case 'R': {
+                std::string filename = current_filename();
+                if(!filename.empty()) {
+                    LOG_INFO("RELOADING {}", filename);
+                    load_gerber_file(filename);
+                }
+            } break;
+
             case VK_LEFT:
                 if(highlight_entity) {
                     highlight_entity_id = std::max(0, highlight_entity_id - 1);
