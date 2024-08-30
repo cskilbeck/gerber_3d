@@ -35,6 +35,8 @@ namespace gerber_util
 
     std::wstring utf16_from_utf8(std::string const &s);
 
+    std::string to_lowercase(std::string const &s);
+
     //////////////////////////////////////////////////////////////////////
 
     template <typename... args> void print(char const *fmt, args &&...arguments)

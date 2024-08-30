@@ -237,6 +237,7 @@ namespace gerber_lib
 
     void gerber::cleanup()
     {
+        filename = std::string{};
         image.cleanup();
         stats.cleanup();
     }
@@ -264,6 +265,8 @@ namespace gerber_lib
         image.gerber = this;
 
         CHECK(parse_gerber_segment(current_net));
+
+        filename = std::string{ file_path };
 
         LOG_VERBOSE("Parsing complete after {} lines, found {} entities", reader.line_number, entities.size());
 

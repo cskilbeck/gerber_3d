@@ -33,6 +33,8 @@ namespace gerber_lib
         static constexpr int min_aperture = 10;
         static constexpr int max_num_apertures = 9999;
 
+        std::string filename;
+
         double image_scale_a{ 1.0 };
         double image_scale_b{ 1.0 };
         double image_rotation{ 0.0 };

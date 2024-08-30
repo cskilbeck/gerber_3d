@@ -28,6 +28,8 @@ namespace gerber_3d
         void set_gerber(gerber_lib::gerber *g) override;
         void fill_elements(gerber_lib::gerber_draw_element const *elements, size_t num_elements, gerber_lib::gerber_polarity polarity, int entity_id) override;
 
+        std::string current_filename() const;
+
         using Graphics = Gdiplus::Graphics;
         using GraphicsPath = Gdiplus::GraphicsPath;
         using Bitmap = Gdiplus::Bitmap;

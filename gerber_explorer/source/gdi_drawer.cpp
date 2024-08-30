@@ -108,22 +108,37 @@ namespace gerber_3d
 
     //////////////////////////////////////////////////////////////////////
 
+    std::string gdi_drawer::current_filename() const
+    {
+        if(gerber_file != nullptr) {
+            return gerber_file->filename;
+        }
+        return std::string{};
+    }
+
+    //////////////////////////////////////////////////////////////////////
+
     void gdi_drawer::set_gerber(gerber *g)
     {
         if(gerber_file != nullptr) {
             delete gerber_file;
         }
+
         gerber_file = g;
-        set_default_zoom();
-        while(!gdi_paths.empty()) {
-            delete gdi_paths.back();
-            gdi_paths.pop_back();
+
+        if(gerber_file != nullptr) {
+
+            set_default_zoom();
+            while(!gdi_paths.empty()) {
+                delete gdi_paths.back();
+                gdi_paths.pop_back();
+            }
+            gdi_entities.clear();
+            gerber_file->draw(*this);
+            entities_clicked.clear();
+            selected_entity_index = 0;
+            highlight_entity = false;
         }
-        gdi_entities.clear();
-        gerber_file->draw(*this);
-        entities_clicked.clear();
-        selected_entity_index = 0;
-        highlight_entity = false;
         redraw();
     }
 

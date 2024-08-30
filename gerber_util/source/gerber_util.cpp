@@ -1,4 +1,5 @@
 #include <gerber_util.h>
+#include <algorithm>
 
 namespace
 {
@@ -14,4 +15,14 @@ namespace gerber_util
     {
         return converter.from_bytes(s);
     }
-}    // namespace gerber_lib
+
+    //////////////////////////////////////////////////////////////////////
+
+    std::string to_lowercase(std::string const &s)
+    {
+        std::string r = s;
+        std::transform(r.begin(), r.end(), r.begin(), [](unsigned char c) { return (char)std::tolower(c); });
+        return r;
+    }
+
+}    // namespace gerber_util
