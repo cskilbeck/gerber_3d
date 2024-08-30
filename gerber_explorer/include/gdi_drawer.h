@@ -147,8 +147,8 @@ namespace gerber_3d
         std::vector<int> entities_clicked;
         size_t selected_entity_index;
 
-        gerber_lib::gerber_2d::matrix get_transform_matrix();
-        gerber_lib::gerber_2d::vec2d world_pos_from_window_pos(POINT const &window_pos);
+        gerber_lib::gerber_2d::matrix get_transform_matrix() const;
+        gerber_lib::gerber_2d::vec2d world_pos_from_window_pos(POINT const &window_pos) const;
 
         gerber_3d::occ_drawer occ;
 

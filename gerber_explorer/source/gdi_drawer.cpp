@@ -24,7 +24,11 @@ namespace
 
     using namespace gerber_lib;
     using namespace gerber_2d;
-    using namespace Gdiplus;
+
+    using Gdiplus::SolidBrush;
+    using Gdiplus::Matrix;
+    using Gdiplus::Color;
+    using Gdiplus::PointF;
 
     Color const debug_color{ 255, 0, 0, 0 };
 
@@ -139,11 +143,11 @@ namespace gerber_3d
 
     //////////////////////////////////////////////////////////////////////
 
-    gerber_lib::gerber_2d::vec2d gdi_drawer::world_pos_from_window_pos(POINT const &window_pos)
+    gerber_lib::gerber_2d::vec2d gdi_drawer::world_pos_from_window_pos(POINT const &window_pos) const
     {
         vec2d pos{ (double)window_pos.x, (double)window_pos.y };
         matrix transform = get_transform_matrix();
-        return vec2d{ pos.x, pos.y, invert_matrix(transform) };
+        return vec2d{ pos.x, pos.y, matrix::invert(transform) };
     }
 
     //////////////////////////////////////////////////////////////////////
@@ -198,15 +202,21 @@ namespace gerber_3d
 
         PointF gdi_point((REAL)img.x, (REAL)img.y);
 
+        LOG_INFO("Checking {} entities", gdi_entities.size());
+
         for(auto const &entity : gdi_entities) {
 
             if(entity.bounds.Contains(gdi_mouse_mos)) {
+
+                LOG_INFO("  Checking entity {} ({} paths)", entity.entity_id, entity.num_paths);
 
                 int path_id = entity.path_id;
 
                 for(int n = 0; n < entity.num_paths; ++n) {
 
                     GraphicsPath *path = gdi_paths[path_id];
+
+                    LOG_INFO("    Path {} has {} points", path_id, path->GetPointCount());
 
                     if(path->IsVisible(gdi_point, graphics)) {
                         LOG_DEBUG("ENTITY {} is visible via PATH {}", entity_id, path_id);
@@ -427,9 +437,9 @@ namespace gerber_3d
 
                     vec2d scale{ image_size_px.x / gerber_width, image_size_px.y / gerber_height };
 
-                    matrix m = make_translation({ -image_pos_px.x, -image_pos_px.y });
-                    m = matrix_multiply(m, make_scale({ 1 / scale.x, 1 / scale.y }));
-                    m = matrix_multiply(m, make_translation({ gerber_rect.min_pos.x, gerber_rect.min_pos.y }));
+                    matrix m = matrix::translate({ -image_pos_px.x, -image_pos_px.y });
+                    m = matrix::multiply(m, matrix::scale({ 1 / scale.x, 1 / scale.y }));
+                    m = matrix::multiply(m, matrix::translate({ gerber_rect.min_pos.x, gerber_rect.min_pos.y }));
 
                     vec2d min(drag_rect.min_pos, m);
                     vec2d max(drag_rect.max_pos, m);
@@ -642,7 +652,7 @@ namespace gerber_3d
 
         bool fill = polarity == polarity_dark || polarity == polarity_positive;
 
-        entity_id -= 1;
+//        entity_id -= 1;
         if(gdi_entities.empty() || gdi_entities.back().entity_id != entity_id) {
             gdi_entities.emplace_back(entity_id, (int)(gdi_paths.size() - 1llu), 1, fill);
         } else {
@@ -667,7 +677,7 @@ namespace gerber_3d
             } break;
             }
         }
-        p->CloseFigure();
+        p->CloseAllFigures();
         RectF bounds;
         p->GetBounds(&bounds, nullptr, nullptr);
         if(entity.bounds.IsEmptyArea()) {
@@ -799,10 +809,10 @@ namespace gerber_3d
 
     //////////////////////////////////////////////////////////////////////
 
-    matrix gdi_drawer::get_transform_matrix()
+    matrix gdi_drawer::get_transform_matrix() const
     {
         if(gerber_file == nullptr) {
-            return make_identity();
+            return matrix::identity();
         }
         rect const &gerber_rect = gerber_file->image.info.extent;
         double gerber_width = width(gerber_rect);
@@ -811,14 +821,14 @@ namespace gerber_3d
 
 #if 0
         // upside down (not flipped)
-        matrix mat = make_translation({ -gerber_rect.min_pos.x, -gerber_rect.min_pos.y });
-        mat = matrix_multiply(mat, make_scale({ scale.x, scale.y }));
-        return matrix_multiply(mat, make_translation({ image_pos_px.x, image_pos_px.y }));
+        matrix mat = matrix::make_translation({ -gerber_rect.min_pos.x, -gerber_rect.min_pos.y });
+        mat = matrix::multiply(mat, matrix::make_scale({ scale.x, scale.y }));
+        return matrix::multiply(mat, matrix::make_translation({ image_pos_px.x, image_pos_px.y }));
 #else
         // right way up (vertically flipped)
-        matrix mat = make_translation({ -gerber_rect.min_pos.x, -gerber_rect.min_pos.y });
-        mat = matrix_multiply(mat, make_scale({ scale.x, -scale.y }));
-        return matrix_multiply(mat, make_translation({ image_pos_px.x, window_size.y - image_pos_px.y }));
+        matrix mat = matrix::translate({ -gerber_rect.min_pos.x, -gerber_rect.min_pos.y });
+        mat = matrix::multiply(mat, matrix::scale({ scale.x, -scale.y }));
+        return matrix::multiply(mat, matrix::translate({ image_pos_px.x, window_size.y - image_pos_px.y }));
 #endif
     }
 

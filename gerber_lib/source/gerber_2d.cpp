@@ -8,6 +8,12 @@ namespace gerber_lib
     {
         //////////////////////////////////////////////////////////////////////
 
+        vec2d::vec2d(double x, double y) : x(x), y(y)
+        {
+        }
+
+        //////////////////////////////////////////////////////////////////////
+
         vec2d::vec2d(double x, double y, matrix const &m) : x(x * m.A + y * m.C + m.X), y(x * m.B + y * m.D + m.Y)
         {
         }
@@ -20,7 +26,7 @@ namespace gerber_lib
 
         //////////////////////////////////////////////////////////////////////
 
-        matrix matrix_multiply(matrix const &l, matrix const &r)
+        matrix matrix::multiply(matrix const &l, matrix const &r)
         {
             return matrix(l.A * r.A + l.B * r.C,          //
                           l.A * r.B + l.B * r.D,          //
@@ -32,21 +38,21 @@ namespace gerber_lib
 
         //////////////////////////////////////////////////////////////////////
 
-        matrix make_identity()
+        matrix matrix::identity()
         {
             return matrix(1.0, 0.0, 0.0, 1.0, 0.0, 0.0);
         }
 
         //////////////////////////////////////////////////////////////////////
 
-        matrix make_translation(vec2d const &offset)
+        matrix matrix::translate(vec2d const &offset)
         {
             return matrix(1.0, 0.0, 0.0, 1.0, offset.x, offset.y);
         }
 
         //////////////////////////////////////////////////////////////////////
 
-        matrix make_rotation(double angle_degrees)
+        matrix matrix::rotate(double angle_degrees)
         {
             double radians = deg_2_rad(angle_degrees);
             double s = sin(radians);
@@ -56,31 +62,31 @@ namespace gerber_lib
 
         //////////////////////////////////////////////////////////////////////
 
-        matrix make_scale(vec2d const &scale)
+        matrix matrix::scale(vec2d const &scale)
         {
             return matrix(scale.x, 0.0, 0.0, scale.y, 0.0, 0.0);
         }
 
         //////////////////////////////////////////////////////////////////////
 
-        matrix make_rotate_around(double angle_degrees, vec2d const &pos)
+        matrix matrix::rotate_around(double angle_degrees, vec2d const &pos)
         {
             matrix m;
-            m = make_translation({ -pos.x, -pos.y });
-            m = matrix_multiply(make_rotation(angle_degrees), m);
-            m = matrix_multiply(make_translation(pos), m);
+            m = translate({ -pos.x, -pos.y });
+            m = multiply(rotate(angle_degrees), m);
+            m = multiply(translate(pos), m);
             return m;
         }
 
         //////////////////////////////////////////////////////////////////////
 
-        matrix invert_matrix(matrix const &m)
+        matrix matrix::invert(matrix const &m)
         {
             double det = m.A * m.D - m.B * m.C;
 
             // Check for singular matrix
             if(det == 0) {
-                return make_identity();
+                return identity();
             }
 
             return matrix(m.D / det, -m.B / det, -m.C / det, m.A / det, (m.B * m.Y - m.D * m.X) / det, (m.C * m.X - m.A * m.Y) / det);

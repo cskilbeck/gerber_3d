@@ -18,22 +18,12 @@ namespace gerber_lib
 
         struct vec2d
         {
-
             double x{};
             double y{};
 
             vec2d() = default;
-
-            vec2d(double x, double y) : x(x), y(y)
-            {
-            }
-
-            //////////////////////////////////////////////////////////////////////
-
+            vec2d(double x, double y);
             vec2d(double x, double y, matrix const &transform_matrix);
-
-            //////////////////////////////////////////////////////////////////////
-
             vec2d(vec2d const &o, matrix const &transform_matrix);
 
             //////////////////////////////////////////////////////////////////////
@@ -85,8 +75,8 @@ namespace gerber_lib
                 return std::format("(X:{:7.3f},Y:{:7.3f})", x, y);
             }
         };
-    }
-}
+    }    // namespace gerber_2d
+}    // namespace gerber_lib
 GERBER_MAKE_FORMATTER(gerber_lib::gerber_2d::vec2d);
 
 namespace gerber_lib
@@ -135,25 +125,13 @@ namespace gerber_lib
 
         struct matrix
         {
-            double A,B;
-            double C,D;
-            double X,Y;
+            double A, B;
+            double C, D;
+            double X, Y;
 
             //////////////////////////////////////////////////////////////////////
 
             matrix() = default;
-
-            //////////////////////////////////////////////////////////////////////
-
-            matrix(matrix const &o)
-            {
-                A = o.A;
-                B = o.B;
-                C = o.C;
-                D = o.D;
-                X = o.X;
-                Y = o.Y;
-            }
 
             //////////////////////////////////////////////////////////////////////
 
@@ -167,15 +145,16 @@ namespace gerber_lib
             {
                 return std::format("MATRIX: A:{}, B:{}, C:{}, D:{}, X:{}, Y:{}", A, B, C, D, X, Y);
             }
+
+            static matrix multiply(matrix const &l, matrix const &r);
+            static matrix identity();
+            static matrix translate(vec2d const &offset);
+            static matrix rotate(double angle_degrees);
+            static matrix scale(vec2d const &scale);
+            static matrix rotate_around(double angle_degrees, vec2d const &pos);
+            static matrix invert(matrix const &m);
         };
 
-        matrix matrix_multiply(matrix const &l, matrix const &r);
-        matrix make_identity();
-        matrix make_translation(vec2d const &offset);
-        matrix make_rotation(double angle_degrees);
-        matrix make_scale(vec2d const &scale);
-        matrix make_rotate_around(double angle_degrees, vec2d const &pos);
-        matrix invert_matrix(matrix const &m);
         vec2d transform_point(matrix const &m, vec2d const &p);
 
         //////////////////////////////////////////////////////////////////////
@@ -191,7 +170,7 @@ namespace gerber_lib
 
         inline vec2d mid_point(rect const &r)
         {
-            return vec2d{(r.min_pos.x + r.max_pos.x) / 2, (r.min_pos.y + r.max_pos.y) / 2};
+            return vec2d{ (r.min_pos.x + r.max_pos.x) / 2, (r.min_pos.y + r.max_pos.y) / 2 };
         }
 
         //////////////////////////////////////////////////////////////////////
@@ -225,4 +204,3 @@ namespace gerber_lib
 
 GERBER_MAKE_FORMATTER(gerber_lib::gerber_2d::rect);
 GERBER_MAKE_FORMATTER(gerber_lib::gerber_2d::matrix);
-

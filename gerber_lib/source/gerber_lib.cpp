@@ -1,7 +1,11 @@
 //////////////////////////////////////////////////////////////////////
 
+
+
 #define _USE_MATH_DEFINES
 #include <math.h>
+
+#include <memory>
 #include <span>
 #include <algorithm>
 #include <format>
@@ -333,11 +337,11 @@ namespace gerber_lib
             int aperture_number;
             CHECK(reader.get_int(&aperture_number));
 
-            if(aperture_number >= 10 && aperture_number <= max_num_apertures) {
-                state.current_aperture = aperture_number;
-            } else {
+            if(aperture_number < 10 || aperture_number > max_num_apertures) {
                 return stats.error(reader, error_bad_aperture_number, "D{} out of bounds", aperture_number);
             }
+
+            state.current_aperture = aperture_number;
             stats.g54 += 1;
         } break;
 
@@ -504,34 +508,20 @@ namespace gerber_lib
 
         case 'AM': {
 
-            gerber_aperture_macro *macro = new gerber_aperture_macro();
-            gerber_error_code err = macro->parse_aperture_macro(reader);
+            auto macro = std::make_unique<gerber_aperture_macro>();
+            CHECK(macro->parse_aperture_macro(reader));
+            image.aperture_macros.push_back(macro.release());
+            return ok;
 
-            if(err == ok) {
-
-                image.aperture_macros.push_back(macro);
-                return ok;
-
-            } else {
-
-                delete macro;
-                return stats.error(reader, err, "Error parsing aperture macro");
-            }
-        } break;    // this break is redundant but retained for the linter
+        } break;    // redundant, for the linter
 
             //////////////////////////////////////////////////////////////////////
             // AD: aperture definition
 
         case 'AD': {
-            gerber_aperture *aperture = new gerber_aperture();
+            auto aperture = std::make_unique<gerber_aperture>();
 
-            auto cleanup = SCOPED([&]() {
-                if(aperture != nullptr) {
-                    delete aperture;
-                }
-            });
-
-            if(parse_aperture_definition(aperture, &image, unit_scale) == ok) {
+            if(parse_aperture_definition(aperture.get(), &image, unit_scale) == ok) {
 
                 int aperture_number = aperture->aperture_number;
 
@@ -545,8 +535,7 @@ namespace gerber_lib
                         // image.apertures.erase(aperture_number);
                     }
 
-                    image.apertures[aperture_number] = aperture;
-                    aperture = nullptr;
+                    image.apertures[aperture_number] = aperture.release();
 
                     // stats.add_aperture(-1, aperture_number, aperture->aperture_type, aperture->parameters);
                     stats.add_new_d_list(aperture_number);
@@ -1236,12 +1225,13 @@ namespace gerber_lib
             return stats.error(reader, error_unknown_command, "{}", string_from_uint32(command));
         }
 
-        reader.rewind(1);
-
-        // ignore everything up to the *
+        // ignore everything up to (but not including) the *
         CHECK(reader.read_until(nullptr, '*'));
 
-        // skip the *
+        if(reader.eof()) {
+            return stats.error(reader, error_unterminated_command, "expected *, got EOF");
+        }
+
         reader.skip(1);
 
         char c;
@@ -1452,8 +1442,8 @@ namespace gerber_lib
                 rotation = macro.parameters[circle_rotation];
             }
             vec2d center({ macro.parameters[circle_centre_x], macro.parameters[circle_centre_y] });
-            matrix apm = matrix_multiply(aperture_matrix, make_rotation(rotation));
-            apm = matrix_multiply(apm, make_translation(net->end));
+            matrix apm = matrix::multiply(aperture_matrix, matrix::rotate(rotation));
+            apm = matrix::multiply(apm, matrix::translate(net->end));
             center = vec2d(center, apm);
             double radius = macro.parameters[circle_diameter] / 2;
             points.clear();
@@ -1495,8 +1485,8 @@ namespace gerber_lib
             double diameter = macro.parameters[polygon_diameter];
             double rotation = macro.parameters[polygon_rotation];
             vec2d offset{ macro.parameters[polygon_centre_x], macro.parameters[polygon_centre_y] };
-            matrix apm = matrix_multiply(aperture_matrix, make_rotate_around(rotation, offset));
-            apm = matrix_multiply(apm, make_translation(net->end));
+            matrix apm = matrix::multiply(aperture_matrix, matrix::rotate_around(rotation, offset));
+            apm = matrix::multiply(apm, matrix::translate(net->end));
             points.reserve(num_sides);
             points.emplace_back(diameter / 2.0 + offset.x, offset.y, aperture_matrix);
             for(size_t i = 1; i < num_sides; ++i) {
@@ -1511,8 +1501,8 @@ namespace gerber_lib
             size_t num_points = static_cast<size_t>(macro.parameters[outline_number_of_points]);
             vec2d offset{ macro.parameters[outline_first_x], macro.parameters[outline_first_x] };
             double rotation = macro.parameters[num_points * 2 + outline_rotation];
-            matrix apm = matrix_multiply(aperture_matrix, make_rotate_around(rotation, offset));
-            apm = matrix_multiply(apm, make_translation(net->end));
+            matrix apm = matrix::multiply(aperture_matrix, matrix::rotate_around(rotation, offset));
+            apm = matrix::multiply(apm, matrix::translate(net->end));
             points.clear();
             points.reserve(num_points + 1);
             for(size_t p = 0; p <= num_points; ++p) {
@@ -1528,7 +1518,7 @@ namespace gerber_lib
             double width = macro.parameters[line_20_line_width] / 2.0;
             if(width != 0.0) {
                 double rotation = macro.parameters[line_20_rotation];
-                matrix apm = matrix_multiply(aperture_matrix, make_rotate_around(rotation, { net->end.x + start.x, net->end.y + start.y }));
+                matrix apm = matrix::multiply(aperture_matrix, matrix::rotate_around(rotation, { net->end.x + start.x, net->end.y + start.y }));
                 points.clear();
                 points.reserve(4);
                 points.emplace_back(net->end.x + start.x + width, net->end.y + start.y - width, apm);
@@ -1544,8 +1534,8 @@ namespace gerber_lib
             double height = macro.parameters[line_21_line_height] / 2.0;
             if(width != 0.0 && height != 0.0) {
                 vec2d offset{ macro.parameters[line_21_centre_x], macro.parameters[line_21_centre_y] };
-                matrix apm = matrix_multiply(aperture_matrix, make_rotate_around(rotation, offset));
-                apm = matrix_multiply(apm, make_translation(net->end));
+                matrix apm = matrix::multiply(aperture_matrix, matrix::rotate_around(rotation, offset));
+                apm = matrix::multiply(apm, matrix::translate(net->end));
                 points.clear();
                 points.reserve(4);
                 points.emplace_back(-width, -height, apm);
@@ -1561,7 +1551,7 @@ namespace gerber_lib
             double height = macro.parameters[line_22_line_height];
             if(width != 0.0 && height != 0.0) {
                 vec2d offset{ macro.parameters[line_22_lower_left_x], macro.parameters[line_22_lower_left_y] };
-                matrix apm = matrix_multiply(aperture_matrix, make_rotate_around(rotation, offset));
+                matrix apm = matrix::multiply(aperture_matrix, matrix::rotate_around(rotation, offset));
                 double llx = net->end.x + offset.x;
                 double lly = net->end.y + offset.y;
                 points.clear();
@@ -1827,7 +1817,7 @@ namespace gerber_lib
 
                 case interpolation_linear:
                     if(state.is_region_fill) {
-                        update_bounds(bounding_box, make_identity(), net->end);
+                        update_bounds(bounding_box, matrix::identity(), net->end);
                     }
                     break;
 
@@ -1915,7 +1905,7 @@ namespace gerber_lib
                     break;
                 }
                 // Only update the min/max values and aperture stats if we are drawing.
-                aperture_matrix = make_identity();
+                aperture_matrix = matrix::identity();
 
                 if(net->aperture_state != aperture_state_off && net->interpolation_method != interpolation_region_start) {
 
@@ -1943,24 +1933,24 @@ namespace gerber_lib
                         repeat_offset.x = (state.level->step_and_repeat.pos.x - 1) * state.level->step_and_repeat.distance.x;
                         repeat_offset.y = (state.level->step_and_repeat.pos.y - 1) * state.level->step_and_repeat.distance.y;
 
-                        aperture_matrix = matrix_multiply(make_translation({ image.info.offset_a, image.info.offset_b }), aperture_matrix);
-                        aperture_matrix = matrix_multiply(make_rotation(image.info.image_rotation), aperture_matrix);
-                        aperture_matrix = matrix_multiply(make_scale(state.net_state->scale), aperture_matrix);
-                        aperture_matrix = matrix_multiply(make_translation(state.net_state->offset), aperture_matrix);
+                        aperture_matrix = matrix::multiply(matrix::translate({ image.info.offset_a, image.info.offset_b }), aperture_matrix);
+                        aperture_matrix = matrix::multiply(matrix::rotate(image.info.image_rotation), aperture_matrix);
+                        aperture_matrix = matrix::multiply(matrix::scale(state.net_state->scale), aperture_matrix);
+                        aperture_matrix = matrix::multiply(matrix::translate(state.net_state->offset), aperture_matrix);
 
                         // Apply mirror.
                         switch(state.net_state->mirror_state) {
 
                         case mirror_state_flip_a:
-                            aperture_matrix = matrix_multiply(make_scale({ -1, 1 }), aperture_matrix);
+                            aperture_matrix = matrix::multiply(matrix::scale({ -1, 1 }), aperture_matrix);
                             break;
 
                         case mirror_state_flip_b:
-                            aperture_matrix = matrix_multiply(make_scale({ 1, -1 }), aperture_matrix);
+                            aperture_matrix = matrix::multiply(matrix::scale({ 1, -1 }), aperture_matrix);
                             break;
 
                         case mirror_state_flip_ab:
-                            aperture_matrix = matrix_multiply(make_scale({ -1, -1 }), aperture_matrix);
+                            aperture_matrix = matrix::multiply(matrix::scale({ -1, -1 }), aperture_matrix);
                             break;
 
                         default:
@@ -1971,8 +1961,8 @@ namespace gerber_lib
                         if(state.net_state->axis_select == axis_select_swap_ab) {
 
                             // do this by rotating 90 clockwise, then mirroring the Y axis.
-                            aperture_matrix = matrix_multiply(make_rotation(90.0), aperture_matrix);
-                            aperture_matrix = matrix_multiply(make_scale({ 1, -1 }), aperture_matrix);
+                            aperture_matrix = matrix::multiply(matrix::rotate(90.0), aperture_matrix);
+                            aperture_matrix = matrix::multiply(matrix::scale({ 1, -1 }), aperture_matrix);
                         }
 
                         gerber_aperture *a = nullptr;
@@ -2151,8 +2141,8 @@ namespace gerber_lib
                     polarity = polarity_clear;
                 }
                 vec2d pos(m->parameters[circle_centre_x], m->parameters[circle_centre_y]);
-                matrix mat = make_rotation(rotation);
-                mat = matrix_multiply(mat, make_translation(net->end));
+                matrix mat = matrix::rotate(rotation);
+                mat = matrix::multiply(mat, matrix::translate(net->end));
                 pos = transform_point(mat, pos);
                 gerber_draw_element e(pos, 0, 360, diameter / 2);
                 drawer.fill_elements(&e, 1, polarity, net->entity_id);
@@ -2185,8 +2175,8 @@ namespace gerber_lib
                     double w2 = width / 2;
                     double rotation = m->parameters[line_20_rotation];
 
-                    matrix mat = make_rotation(rotation);
-                    mat = matrix_multiply(mat, make_translation(net->end));
+                    matrix mat = matrix::rotate(rotation);
+                    mat = matrix::multiply(mat, matrix::translate(net->end));
                     // transform_points(mat, points);
 
                     std::array<vec2d, 4> points = { vec2d{ start.x, start.y - w2, mat },    //
@@ -2216,8 +2206,8 @@ namespace gerber_lib
                     double w2 = w / 2;
                     double h2 = h / 2;
 
-                    matrix mat = make_rotation(rotation);
-                    mat = matrix_multiply(mat, make_translation(net->end));
+                    matrix mat = matrix::rotate(rotation);
+                    mat = matrix::multiply(mat, matrix::translate(net->end));
 
                     std::array<vec2d, 4> points = { vec2d({ x - w2, y - h2 }, mat),      //
                                                     vec2d({ x + w2, y - h2 }, mat),      //
@@ -2409,7 +2399,7 @@ namespace gerber_lib
                 add_arc(pos, outer_radius, start_angle, end_angle);
                 add_arc(end_pos, r, end_angle, end_angle + 180);
                 add_arc(pos, inner_radius, end_angle, start_angle);
-                add_arc(start_pos, r, start_angle-180, start_angle);
+                add_arc(start_pos, r, start_angle - 180, start_angle);
 
             } else {
 
