@@ -94,15 +94,17 @@ namespace gerber_3d
 
     gerber_error_code gdi_drawer::load_gerber_file(std::string const &filename)
     {
-        std::thread(
-            [this](std::string filename) {
-                std::unique_ptr<gerber> new_gerber{ std::make_unique<gerber>() };
-                CHECK(new_gerber->parse_file(filename.c_str()));
-                PostMessage(hwnd, WM_USER, 0, (LPARAM)new_gerber.release());
-                return ok;
-            },
-            filename)
-            .detach();
+        if(!filename.empty()) {
+            std::thread(
+                [this](std::string filename) {
+                    std::unique_ptr<gerber> new_gerber{ std::make_unique<gerber>() };
+                    CHECK(new_gerber->parse_file(filename.c_str()));
+                    PostMessage(hwnd, WM_USER, 0, (LPARAM)new_gerber.release());
+                    return ok;
+                },
+                filename)
+                .detach();
+        }
         return gerber_lib::ok;
     }
 
@@ -281,9 +283,6 @@ namespace gerber_3d
         case WM_CREATE: {
             Gdiplus::GdiplusStartupInput gdiplusStartupInput;
             GdiplusStartup(&gdiplus_token, &gdiplusStartupInput, NULL);
-
-            occ.show_progress = true;
-            occ.create_window(100, 100, 700, 700);
         } break;
 
 
@@ -385,6 +384,10 @@ namespace gerber_3d
                 break;
 
             case '3':
+                if(occ.vout.hwnd == nullptr) {
+                    occ.show_progress = true;
+                    occ.create_window(100, 100, 700, 700);
+                }
                 std::thread([&]() {
                     occ.set_gerber(gerber_file);
                     PostMessageA(occ.vout.hwnd, WM_USER, 0, 0);
