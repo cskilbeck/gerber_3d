@@ -44,7 +44,7 @@ namespace
 namespace gerber_3d
 {
     Color const gdi_drawer::gerber_fill_color[2] = { Color(255, 64, 128, 32), Color(128, 64, 128, 32) };
-    Color const gdi_drawer::gerber_clear_color[2] = { Color(255, 255, 240, 224), Color(128, 255, 240, 224) };
+    Color const gdi_drawer::gerber_clear_color[2] = { Color(255, 255, 240, 224), Color(224, 255, 240, 224) };
     Color const gdi_drawer::highlight_color_fill{ 64, 0, 255, 255 };
     Color const gdi_drawer::highlight_color_clear{ 64, 255, 0, 255 };
     Color const gdi_drawer::axes_color{ 255, 0, 0, 0 };
