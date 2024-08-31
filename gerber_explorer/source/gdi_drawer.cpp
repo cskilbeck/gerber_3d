@@ -30,13 +30,105 @@ namespace
     using Gdiplus::Color;
     using Gdiplus::Matrix;
     using Gdiplus::PointF;
+    using Gdiplus::RectF;
     using Gdiplus::SolidBrush;
 
     Color const debug_color{ 255, 0, 0, 0 };
 
-    POINT get_mouse_pos(LPARAM lParam)
+    //////////////////////////////////////////////////////////////////////
+
+    vec2d pos_from_lparam(LPARAM lParam)
     {
-        return POINT{ GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
+        return vec2d{ (double)GET_X_LPARAM(lParam), (double)GET_Y_LPARAM(lParam) };
+    }
+
+    //////////////////////////////////////////////////////////////////////
+    // length is guaranteed to be positive. i.e. the point pos is at the bottom of the vertical line
+
+    bool vertical_line_intersects(PointF const &pos, float length, PointF const &b1, PointF const &b2)
+    {
+        float py = pos.Y;
+        if(length < 0) {
+            length = -length;
+            py -= length;
+        }
+        float d1y = b1.Y - py;
+        float d2y = b2.Y - py;
+        if(d1y < 0 && d2y < 0 || d1y > length && d2y > length) {
+            return false;
+        }
+        float d1x = b1.X - pos.X;
+        float d2x = b2.X - pos.X;
+        if(d1x < 0 && d2x < 0 || d1x > 0 && d2x > 0) {
+            return false;
+        }
+        float dx = b2.X - b1.X;
+        if(dx == 0) {
+            return false;
+        }
+        float dy = b2.Y - b1.Y;
+        float slope = dy / dx;
+        float delta_x = pos.X - b1.X;
+        float y = b1.Y + delta_x * slope - py;
+        return y >= 0 && y < length;
+    }
+
+    //////////////////////////////////////////////////////////////////////
+
+    bool horizontal_line_intersects(PointF const &pos, float length, PointF const &b1, PointF const &b2)
+    {
+        float px = pos.X;
+        if(length < 0) {
+            length = -length;
+            px -= length;
+        }
+        float d1x = b1.X - px;
+        float d2x = b2.X - px;
+        if(d1x < 0 && d2x < 0 || d1x > length && d2x > length) {
+            return false;
+        }
+        float d1y = b1.Y - pos.Y;
+        float d2y = b2.Y - pos.Y;
+        if(d1y < 0 && d2y < 0 || d1y > 0 && d2y > 0) {
+            return false;
+        }
+        float dy = b2.Y - b1.Y;
+        if(dy == 0) {
+            return false;
+        }
+        float dx = b2.X - b1.X;
+        float slope = dx / dy;
+        float delta_y = pos.Y - b1.Y;
+        float x = b1.X + delta_y * slope - px;
+        return x >= 0 && x < length;
+    }
+
+    //////////////////////////////////////////////////////////////////////
+
+    bool rect_intersects_with_polygon(PointF const *polygon_points, size_t num_polygon_points, RectF const &r)
+    {
+        PointF bl{ r.X, r.Y };
+        PointF br{ r.X + r.Width, r.Y };
+        PointF tl{ r.X, r.Y + r.Height };
+        float width = r.Width;
+        float height = r.Height;
+        for(size_t n = 0; n < num_polygon_points; ++n) {
+            PointF const &a = polygon_points[n];
+            PointF const &b = polygon_points[(n + 1) % num_polygon_points];
+            if(horizontal_line_intersects(bl, width, a, b)) {
+                return true;
+            }
+            if(horizontal_line_intersects(tl, width, a, b)) {
+                return true;
+            }
+            if(vertical_line_intersects(br, height, a, b)) {
+                return true;
+            }
+            if(vertical_line_intersects(bl, height, a, b)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     //////////////////////////////////////////////////////////////////////
@@ -120,12 +212,14 @@ namespace gerber_3d
     Color const gdi_drawer::origin_color{ 255, 255, 0, 0 };
     Color const gdi_drawer::extent_color{ 255, 64, 64, 255 };
 
-    Color const gdi_drawer::select_outline_color{ 32, 255, 0, 0 };
-    Color const gdi_drawer::select_fill_color{ 32, 64, 64, 255 };
-    Color const gdi_drawer::select_whole_fill_color{ 64, 0, 255, 0 };
+    Color const gdi_drawer::zoom_select_outline_color{ 32, 255, 0, 0 };
+    Color const gdi_drawer::zoom_select_fill_color{ 32, 64, 64, 255 };
+    Color const gdi_drawer::zoom_select_whole_fill_color{ 64, 0, 255, 0 };
 
     Color const gdi_drawer::info_text_background_color{ 192, 0, 0, 0 };
     Color const gdi_drawer::info_text_foreground_color{ 255, 255, 255, 255 };
+
+    Color const gdi_drawer::select_color[3] = { Color{ 128, 0, 0, 0 }, Color{ 255, 0, 224, 255 }, Color{ 255, 0, 255, 128 } };
 
     //////////////////////////////////////////////////////////////////////
 
@@ -209,13 +303,6 @@ namespace gerber_3d
 
     //////////////////////////////////////////////////////////////////////
 
-    vec2d gdi_drawer::world_pos_from_window_pos(POINT const &window_pos) const
-    {
-        return world_pos_from_window_pos(vec2d{ (double)window_pos.x, (double)window_pos.y });
-    }
-
-    //////////////////////////////////////////////////////////////////////
-
     vec2d gdi_drawer::window_pos_from_world_pos(vec2d const &world_pos) const
     {
         return vec2d{ world_pos, get_transform_matrix() };
@@ -223,7 +310,7 @@ namespace gerber_3d
 
     //////////////////////////////////////////////////////////////////////
 
-    void gdi_drawer::zoom_image(POINT const &pos, double zoom_scale)
+    void gdi_drawer::zoom_image(vec2d const &pos, double zoom_scale)
     {
         // normalized position within view_rect
         vec2d zoom_pos = vec2d{ (double)pos.x, window_size.y - (double)pos.y }.divide(window_size);
@@ -243,7 +330,7 @@ namespace gerber_3d
 
     //////////////////////////////////////////////////////////////////////
 
-    void gdi_drawer::on_left_click(POINT const &mouse_pos)
+    void gdi_drawer::on_left_click(vec2d const &mouse_pos)
     {
         LOG_CONTEXT("pick", info);
 
@@ -300,6 +387,7 @@ namespace gerber_3d
             }
             highlight_entity_id = entities_clicked[selected_entity_index];
         }
+        redraw();
     }
 
     //////////////////////////////////////////////////////////////////////
@@ -468,7 +556,7 @@ namespace gerber_3d
             window_rect = { { 0, 0 }, window_size };
             vec2d old_view_size = size(view_rect);
             vec2d new_view_size = old_view_size.multiply(scale_factor);
-            view_rect = { view_rect.min_pos, view_rect.min_pos.add(new_view_size) };
+            view_rect.max_pos = view_rect.min_pos.add(new_view_size);
             redraw();
         } break;
 
@@ -476,16 +564,21 @@ namespace gerber_3d
 
         case WM_MOUSEWHEEL: {
             double scale_factor = ((int16_t)(HIWORD(wParam)) > 0) ? 1.1 : 0.9;
-            POINT mouse_pos = get_mouse_pos(lParam);
-            ScreenToClient(hwnd, &mouse_pos);
-            zoom_image(mouse_pos, scale_factor);
+            POINT pos = POINT{ GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
+            ScreenToClient(hwnd, &pos);
+            zoom_image(vec2d{ (double)pos.x, (double)pos.y }, scale_factor);
         } break;
 
             //////////////////////////////////////////////////////////////////////
 
         case WM_LBUTTONDOWN: {
-            POINT mouse_pos = get_mouse_pos(lParam);
+            vec2d mouse_pos = pos_from_lparam(lParam);
             if((GetKeyState(VK_CONTROL) & 0x8000) != 0) {
+                mouse_drag = mouse_drag_zoom_select;
+                drag_mouse_start_pos = mouse_pos;
+                drag_rect = {};
+                SetCapture(hwnd);
+            } else if((GetKeyState(VK_SHIFT) & 0x8000) != 0) {
                 mouse_drag = mouse_drag_select;
                 drag_mouse_start_pos = mouse_pos;
                 drag_rect = {};
@@ -499,7 +592,7 @@ namespace gerber_3d
 
         case WM_LBUTTONUP: {
 
-            if(mouse_drag == mouse_drag_select) {
+            if(mouse_drag == mouse_drag_zoom_select) {
                 vec2d mn = drag_rect.min_pos;
                 vec2d mx = drag_rect.max_pos;
                 view_rect = { world_pos_from_window_pos(vec2d{ mn.x, mx.y }), world_pos_from_window_pos(vec2d{ mx.x, mn.y }) };
@@ -513,7 +606,7 @@ namespace gerber_3d
 
         case WM_MBUTTONDOWN:
             mouse_drag = mouse_drag_zoom;
-            drag_mouse_cur_pos = get_mouse_pos(lParam);
+            drag_mouse_cur_pos = pos_from_lparam(lParam);
             drag_mouse_start_pos = drag_mouse_cur_pos;
             SetCapture(hwnd);
             break;
@@ -530,7 +623,7 @@ namespace gerber_3d
 
         case WM_RBUTTONDOWN:
             mouse_drag = mouse_drag_pan;
-            drag_mouse_cur_pos = get_mouse_pos(lParam);
+            drag_mouse_cur_pos = pos_from_lparam(lParam);
             SetCapture(hwnd);
             break;
 
@@ -549,7 +642,7 @@ namespace gerber_3d
             switch(mouse_drag) {
 
             case mouse_drag_pan: {
-                POINT mouse_pos = get_mouse_pos(lParam);
+                vec2d mouse_pos = pos_from_lparam(lParam);
                 vec2d new_mouse_pos = world_pos_from_window_pos(mouse_pos);
                 vec2d old_mouse_pos = world_pos_from_window_pos(drag_mouse_cur_pos);
                 view_rect = view_rect.offset(new_mouse_pos.subtract(old_mouse_pos).negate());
@@ -558,16 +651,15 @@ namespace gerber_3d
             } break;
 
             case mouse_drag_zoom: {
-                POINT mouse_pos = get_mouse_pos(lParam);
-                double dx = (double)(mouse_pos.x - drag_mouse_cur_pos.x);
-                double dy = (double)(mouse_pos.y - drag_mouse_cur_pos.y);
-                zoom_image(drag_mouse_start_pos, 1.0 + (dx - dy) * 0.01);
+                vec2d mouse_pos = pos_from_lparam(lParam);
+                vec2d d = mouse_pos.subtract(drag_mouse_cur_pos);
+                zoom_image(drag_mouse_start_pos, 1.0 + (d.x - d.y) * 0.01);
                 drag_mouse_cur_pos = mouse_pos;
                 redraw();
             } break;
 
-            case mouse_drag_select: {
-                drag_mouse_cur_pos = get_mouse_pos(lParam);
+            case mouse_drag_zoom_select: {
+                drag_mouse_cur_pos = pos_from_lparam(lParam);
 
                 if(drag_mouse_cur_pos.x != drag_mouse_start_pos.x && drag_mouse_cur_pos.y != drag_mouse_start_pos.y) {
 
@@ -583,10 +675,18 @@ namespace gerber_3d
                 }
             } break;
 
+            case mouse_drag_select: {
+                entities_clicked.clear();
+                highlight_entity = false;
+                vec2d mouse_pos = pos_from_lparam(lParam);
+                drag_mouse_cur_pos = mouse_pos;
+
+                // select all the entities which intersect with the drag rectangle!
+
+                redraw();
+            } break;
+
             case mouse_drag_none: {
-                // work out the world coordinate of the mouse position
-                // vec2d pos = world_pos_from_window_pos(get_mouse_pos(lParam));
-                // LOG_INFO("POS: {:9.5f},{:9.5f}mm {:9.5f},{:9.5f}in ", pos.x, pos.y, pos.x / 25.4, pos.y / 25.4);
             } break;
 
             default:
@@ -715,6 +815,7 @@ namespace gerber_3d
 
             if(entity.world_space_bounds.IsEmptyArea()) {
                 p->GetBounds(&entity.world_space_bounds);
+
             } else {
                 RectF path_bounds;
                 p->GetBounds(&path_bounds);
@@ -744,6 +845,8 @@ namespace gerber_3d
 
         release_gdi_resources();
 
+        float dash[2] = { 2, 2 };
+
         bitmap = new Bitmap(sx, sy);
         graphics = Graphics::FromImage(bitmap);
         extent_pen = new Pen(extent_color, 0);
@@ -751,6 +854,13 @@ namespace gerber_3d
         debug_pen = new Pen(debug_color, 2);
         origin_pen = new Pen(origin_color, 0);
         thin_pen = new Pen(Color{ 255, 0, 0, 0 }, 1);
+        select_pen[0] = new Pen(select_color[0], 2);
+        select_pen[1] = new Pen(select_color[1], 2);
+        select_pen[2] = new Pen(select_color[2], 2);
+        select_pen[1]->SetDashStyle(Gdiplus::DashStyleCustom);
+        select_pen[1]->SetDashPattern(dash, 2);
+        select_pen[2]->SetDashStyle(Gdiplus::DashStyleCustom);
+        select_pen[2]->SetDashPattern(dash, 2);
         fill_brush[0] = new SolidBrush(gerber_fill_color[0]);
         fill_brush[1] = new SolidBrush(gerber_fill_color[1]);
         clear_brush[0] = new SolidBrush(gerber_clear_color[0]);
@@ -758,9 +868,9 @@ namespace gerber_3d
         red_fill_brush = new SolidBrush(Color(64, 255, 0, 0));
         highlight_fill_brush = new SolidBrush(highlight_color_fill);
         highlight_clear_brush = new SolidBrush(highlight_color_clear);
-        select_outline_pen = new Pen(select_outline_color, 0);
-        select_fill_brush = new SolidBrush(select_fill_color);
-        select_whole_fill_brush = new SolidBrush(select_whole_fill_color);
+        select_outline_pen = new Pen(zoom_select_outline_color, 0);
+        select_fill_brush = new SolidBrush(zoom_select_fill_color);
+        select_whole_fill_brush = new SolidBrush(zoom_select_whole_fill_color);
         info_text_background_brush = new SolidBrush(info_text_background_color);
         info_text_foregound_brush = new SolidBrush(info_text_foreground_color);
         info_text_font = new Font(L"Consolas", 12.0f, Gdiplus::FontStyleRegular);
@@ -794,6 +904,9 @@ namespace gerber_3d
         safe_delete(origin_pen);
         safe_delete(thin_pen);
         safe_delete(select_outline_pen);
+        safe_delete(select_pen[0]);
+        safe_delete(select_pen[1]);
+        safe_delete(select_pen[2]);
         safe_delete(select_fill_brush);
         safe_delete(select_whole_fill_brush);
         safe_delete(info_text_background_brush);
@@ -958,7 +1071,9 @@ namespace gerber_3d
             }
         }
 
-        if(mouse_drag == mouse_drag_select) {
+        switch(mouse_drag) {
+
+        case mouse_drag_zoom_select: {
 
             graphics->FillRectangle(select_fill_brush, (INT)drag_rect_raw.min_pos.x, (INT)drag_rect_raw.min_pos.y, (INT)width(drag_rect_raw) + 1,
                                     (INT)height(drag_rect_raw) + 1);
@@ -967,6 +1082,20 @@ namespace gerber_3d
 
             graphics->FillRectangle(select_whole_fill_brush, (INT)drag_rect.min_pos.x + 1, (INT)drag_rect.min_pos.y + 1, (INT)width(drag_rect) - 1,
                                     (INT)height(drag_rect) - 1);
+        } break;
+
+        case mouse_drag_select: {
+            int pen_index = 1;
+            if(drag_mouse_start_pos.x > drag_mouse_cur_pos.x) {
+                pen_index = 2;
+            }
+            float x = std::min((float)drag_mouse_start_pos.x, (float)drag_mouse_cur_pos.x);
+            float y = std::min((float)drag_mouse_start_pos.y, (float)drag_mouse_cur_pos.y);
+            float w = std::max((float)drag_mouse_start_pos.x, (float)drag_mouse_cur_pos.x) - x;
+            float h = std::max((float)drag_mouse_start_pos.y, (float)drag_mouse_cur_pos.y) - y;
+            graphics->DrawRectangle(select_pen[0], x, y, w, h);
+            graphics->DrawRectangle(select_pen[pen_index], x, y, w, h);
+        } break;
         }
 
         if(highlight_entity) {
@@ -1048,6 +1177,26 @@ namespace gerber_3d
 
             graphics->DrawString(wide_text.c_str(), (INT)text.size(), info_text_font, origin, info_text_foregound_brush);
         }
+
+#if 0
+        {
+            static PointF p[2];
+            static int id = 0;
+            POINT m;
+            GetCursorPos(&m);
+            ScreenToClient(hwnd, &m);
+            p[id] = { (REAL)m.x, (REAL)m.y };
+            id = 1 - id;
+            Pen *pen = origin_pen;
+            PointF pos{ 200, 200 };
+            float len = -100;
+            graphics->DrawLine(axes_pen, pos, { pos.X + len, pos.Y });
+            if(horizontal_line_intersects(pos, len, p[0], p[1])) {
+                pen = extent_pen;
+            }
+            graphics->DrawLine(pen, p[0], p[1]);
+        }
+#endif
 
         Graphics *window_graphics = Gdiplus::Graphics::FromHDC(hdc);
         window_graphics->DrawImage(bitmap, 0, 0);

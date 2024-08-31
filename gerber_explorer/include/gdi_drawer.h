@@ -70,13 +70,14 @@ namespace gerber_3d
             mouse_drag_none = 0,
             mouse_drag_pan,
             mouse_drag_zoom,
+            mouse_drag_zoom_select,
             mouse_drag_select
         };
 
         mouse_drag_action mouse_drag;
 
-        POINT drag_mouse_cur_pos{};
-        POINT drag_mouse_start_pos{};
+        vec2d drag_mouse_cur_pos{};
+        vec2d drag_mouse_start_pos{};
 
         bool show_origin{ true };
         bool show_extent{ true };
@@ -95,15 +96,16 @@ namespace gerber_3d
         static Color const axes_color;
         static Color const origin_color;
         static Color const extent_color;
-        static Color const select_outline_color;
-        static Color const select_fill_color;
-        static Color const select_whole_fill_color;
+        static Color const zoom_select_outline_color;
+        static Color const zoom_select_fill_color;
+        static Color const zoom_select_whole_fill_color;
         static Color const gerber_fill_color[2];
         static Color const gerber_clear_color[2];
         static Color const highlight_color_fill;
         static Color const highlight_color_clear;
         static Color const info_text_background_color;
         static Color const info_text_foreground_color;
+        static Color const select_color[3];
 
         gerber_lib::gerber *gerber_file{};
 
@@ -116,6 +118,7 @@ namespace gerber_3d
         Pen *extent_pen{ nullptr };
         Pen *select_outline_pen{ nullptr };
         Pen *thin_pen{ nullptr };
+        Pen *select_pen[3]{ nullptr };
         Brush *select_fill_brush{ nullptr };
         Brush *select_whole_fill_brush{ nullptr };
         Brush *fill_brush[2]{ nullptr, nullptr };
@@ -160,13 +163,12 @@ namespace gerber_3d
         size_t selected_entity_index;
 
         matrix get_transform_matrix() const;
-        vec2d world_pos_from_window_pos(POINT const &window_pos) const;
         vec2d world_pos_from_window_pos(vec2d const &window_pos) const;
         vec2d window_pos_from_world_pos(vec2d const &world_pos) const;
 
         gerber_3d::occ_drawer occ;
 
-        void on_left_click(POINT const &mouse_pos);
+        void on_left_click(vec2d const &mouse_pos);
 
         void draw_all_entities();
 
@@ -177,7 +179,7 @@ namespace gerber_3d
 
         void redraw() const;
 
-        void zoom_image(POINT const &pos, double zoom_scale);
+        void zoom_image(vec2d const &pos, double zoom_scale);
         void zoom_to_rect(gerber_lib::rect const &zoom_rect, double border_ratio = 1.1);
 
         std::string get_open_filename();
