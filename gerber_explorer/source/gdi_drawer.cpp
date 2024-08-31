@@ -578,7 +578,7 @@ namespace gerber_3d
 
                     drag_rect_raw.min_pos = { x, y };
                     drag_rect_raw.max_pos = drag_rect_raw.min_pos.add({ w, h });
-                    drag_rect = correct_aspect_ratio(aspect_ratio(window_rect), drag_rect_raw, aspect_shrink);
+                    drag_rect = correct_aspect_ratio(aspect_ratio(window_rect), drag_rect_raw, aspect_expand);
                     redraw();
                 }
             } break;
