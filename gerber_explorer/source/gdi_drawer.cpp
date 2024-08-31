@@ -27,10 +27,10 @@ namespace
     using namespace gerber_lib;
     using namespace gerber_2d;
 
-    using Gdiplus::SolidBrush;
-    using Gdiplus::Matrix;
     using Gdiplus::Color;
+    using Gdiplus::Matrix;
     using Gdiplus::PointF;
+    using Gdiplus::SolidBrush;
 
     Color const debug_color{ 255, 0, 0, 0 };
 
@@ -61,8 +61,50 @@ namespace
                 }
             }
         }
-
         return inside;
+    }
+
+    //////////////////////////////////////////////////////////////////////
+    // make a rectangle have a certain aspect ratio by shrinking or expanding it
+
+    enum aspect_ratio_correction
+    {
+        aspect_shrink,
+        aspect_expand,
+    };
+
+    rect correct_aspect_ratio(double new_aspect_ratio, rect const &r, aspect_ratio_correction correction)
+    {
+        bool dir = aspect_ratio(r) > new_aspect_ratio;
+        if(correction == aspect_expand) {
+            dir = !dir;
+        }
+        vec2d n = size(r).scale(0.5);
+        if(dir) {
+            n.x = n.y * new_aspect_ratio;
+        } else {
+            n.y = n.x / new_aspect_ratio;
+        }
+        vec2d center = mid_point(r);
+        return rect{ center.subtract(n), center.add(n) };
+    }
+
+    //////////////////////////////////////////////////////////////////////
+    // make a matrix which maps window rect to world coordinates
+    // if aspect ratio(view_rect) != aspect_ratio(window_rect), there will be distortion
+
+    matrix world_to_window_transform_matrix(rect const &window, rect const &view)
+    {
+        matrix flip = matrix::scale({ 1, -1 });
+        matrix offset = matrix::translate({ 0, height(window) });
+        matrix t = matrix::translate(view.min_pos.negate());
+        matrix s = matrix::scale({ window.width() / view.width(), window.height() / view.height() });
+        matrix m = matrix::identity();
+        m = matrix::multiply(m, t);
+        m = matrix::multiply(m, s);
+        m = matrix::multiply(m, flip);
+        m = matrix::multiply(m, offset);
+        return m;
     }
 
 };    // namespace
@@ -86,40 +128,10 @@ namespace gerber_3d
 
     //////////////////////////////////////////////////////////////////////
 
-    void gdi_drawer::set_default_zoom()
+    void gdi_drawer::zoom_to_rect(rect const &zoom_rect)
     {
-        if(gerber_file == nullptr) {
-            return;
-        }
-
-        rect const &gerber_rect = gerber_file->image.info.extent;
-
-        double gerber_width = width(gerber_rect);
-        double gerber_height = height(gerber_rect);
-
-        if(gerber_width == 0 || gerber_height == 0) {
-            return;
-        }
-
-        double window_aspect = window_size.x / window_size.y;
-        double gerber_aspect = gerber_width / gerber_height;    // aspect ratio of gerber
-
-        if(gerber_aspect > window_aspect) {
-
-            image_size_px.x = window_size.x;
-            image_size_px.y = window_size.x / gerber_aspect;
-
-            image_pos_px.x = 0;
-            image_pos_px.y = (window_size.y - image_size_px.y) / 2.0;
-
-        } else {
-
-            image_size_px.x = window_size.y * gerber_aspect;
-            image_size_px.y = window_size.y;
-
-            image_pos_px.x = (window_size.x - image_size_px.x) / 2.0;
-            image_pos_px.y = 0;
-        }
+        rect window_rect{ { 0, 0 }, window_size };
+        view_rect = correct_aspect_ratio(aspect_ratio(window_rect), zoom_rect, aspect_expand);
     }
 
     //////////////////////////////////////////////////////////////////////
@@ -163,7 +175,7 @@ namespace gerber_3d
         if(gerber_file != nullptr) {
 
             cleanup();
-            set_default_zoom();
+            zoom_to_rect(gerber_file->image.info.extent);
 
             gerber_file->draw(*this);
         }
@@ -187,36 +199,42 @@ namespace gerber_3d
 
     //////////////////////////////////////////////////////////////////////
 
-    gerber_lib::gerber_2d::vec2d gdi_drawer::world_pos_from_window_pos(POINT const &window_pos) const
+    vec2d gdi_drawer::world_pos_from_window_pos(vec2d const &window_pos) const
     {
-        vec2d pos{ (double)window_pos.x, (double)window_pos.y };
-        matrix transform = get_transform_matrix();
-        return vec2d{ pos.x, pos.y, matrix::invert(transform) };
+        return vec2d{ window_pos, matrix::invert(get_transform_matrix()) };
+    }
+
+    //////////////////////////////////////////////////////////////////////
+
+    vec2d gdi_drawer::world_pos_from_window_pos(POINT const &window_pos) const
+    {
+        return world_pos_from_window_pos(vec2d{ (double)window_pos.x, (double)window_pos.y });
+    }
+
+    //////////////////////////////////////////////////////////////////////
+
+    vec2d gdi_drawer::window_pos_from_world_pos(vec2d const &world_pos) const
+    {
+        return vec2d{ world_pos, get_transform_matrix() };
     }
 
     //////////////////////////////////////////////////////////////////////
 
     void gdi_drawer::zoom_image(POINT const &pos, double zoom_scale)
     {
-        RECT rc;
-        GetClientRect(hwnd, &rc);
-        vec2d mouse_pos{ (double)pos.x, (double)(rc.bottom - pos.y) };
-        vec2d relative_mouse_pos{ (mouse_pos.x - image_pos_px.x) / image_size_px.x, (mouse_pos.y - image_pos_px.y) / image_size_px.y };
+        // normalized position within view_rect
+        vec2d zoom_pos = vec2d{ (double)pos.x, window_size.y - (double)pos.y }.divide(window_size);
 
-        image_size_px = image_size_px.multiply({ zoom_scale, zoom_scale });
+        // scaled view_rect size
+        vec2d new_size{ view_rect.width() / zoom_scale, view_rect.height() / zoom_scale };
 
-        // make it so image_size_px is at least ## pixels big in smallest dimension
-        double smallest = std::max(1.0, std::min(image_size_px.x, image_size_px.y));
+        // world position of pos
+        vec2d p = view_rect.min_pos.add(zoom_pos.multiply(size(view_rect)));
 
-        double ratio = 16.0 / smallest;
-
-        if(ratio > 1.0) {
-            image_size_px.x *= ratio;
-            image_size_px.y *= ratio;
-        }
-
-        relative_mouse_pos = relative_mouse_pos.multiply(image_size_px);
-        image_pos_px = { mouse_pos.x - relative_mouse_pos.x, mouse_pos.y - relative_mouse_pos.y };
+        // new rectangle offset from world position
+        vec2d bottom_left = p.subtract(new_size.multiply(zoom_pos));
+        vec2d top_right = bottom_left.add(new_size);
+        view_rect = { bottom_left, top_right };
         redraw();
     }
 
@@ -240,7 +258,7 @@ namespace gerber_3d
 
         for(auto const &entity : gdi_entities) {
 
-            if(entity.bounds.Contains(gdi_mouse_pos)) {
+            if(entity.pixel_space_bounds.Contains(gdi_mouse_pos)) {
 
                 LOG_DEBUG("      Checking entity {} ({} paths)", entity.entity_id, entity.num_paths);
 
@@ -342,8 +360,16 @@ namespace gerber_3d
                 break;
 
             case 'F':
-                set_default_zoom();
-                redraw();
+                if(gerber_file != nullptr) {
+                    if(highlight_entity) {
+                        RectF const &r = gdi_entities[highlight_entity_id].world_space_bounds;
+                        rect zoom_rect{ (REAL)r.X, (REAL)r.Y, (REAL)(r.X + r.Width), (REAL)(r.Y + r.Height) };
+                        zoom_to_rect(zoom_rect);
+                    } else {
+                        zoom_to_rect(gerber_file->image.info.extent);
+                    }
+                    redraw();
+                }
                 break;
 
             case 'O':
@@ -428,10 +454,19 @@ namespace gerber_3d
             break;
 
             //////////////////////////////////////////////////////////////////////
+            // window resize - update the world view rectangle accordingly
 
-        case WM_SIZE:
+        case WM_SIZE: {
+            RECT rc;
+            GetClientRect(hwnd, &rc);
+            vec2d new_window_size = { (double)rc.right, (double)rc.bottom };
+            vec2d scale_factor = new_window_size.divide(window_size);
+            window_size = new_window_size;
+            vec2d old_view_size = size(view_rect);
+            vec2d new_view_size = old_view_size.multiply(scale_factor);
+            view_rect = { view_rect.min_pos, view_rect.min_pos.add(new_view_size) };
             redraw();
-            break;
+        } break;
 
             //////////////////////////////////////////////////////////////////////
 
@@ -461,44 +496,7 @@ namespace gerber_3d
         case WM_LBUTTONUP: {
 
             if(mouse_drag == mouse_drag_select) {
-
-                if(width(drag_rect) != 0 && height(drag_rect) != 0) {
-
-                    LOG_CONTEXT("LMBUP", debug);
-
-                    // get position of drag rectangle in mm
-                    rect const &gerber_rect = gerber_file->image.info.extent;
-
-                    double gerber_width = width(gerber_rect);
-                    double gerber_height = height(gerber_rect);
-
-                    vec2d scale{ image_size_px.x / gerber_width, image_size_px.y / gerber_height };
-
-                    matrix m = matrix::translate({ -image_pos_px.x, -image_pos_px.y });
-                    m = matrix::multiply(m, matrix::scale({ 1 / scale.x, 1 / scale.y }));
-                    m = matrix::multiply(m, matrix::translate({ gerber_rect.min_pos.x, gerber_rect.min_pos.y }));
-
-                    vec2d min(drag_rect.min_pos, m);
-                    vec2d max(drag_rect.max_pos, m);
-
-                    double l = (drag_rect.min_pos.x - image_pos_px.x) / image_size_px.x;
-                    double t = (drag_rect.min_pos.y - image_pos_px.y) / image_size_px.y;
-
-                    double r = (drag_rect.max_pos.x - image_pos_px.x) / image_size_px.x;
-                    double b = (drag_rect.max_pos.y - image_pos_px.y) / image_size_px.y;
-
-                    double w = r - l;
-                    double h = b - t;
-
-                    LOG_INFO("{:5.3f},{:5.3f}-{:5.3f},{:5.3f} ({:5.3f}x{:5.3f})", l, t, r, b, w, h);
-
-                    image_size_px = { window_size.x / w, window_size.y / h };
-
-                    // look in zoom_image for how to center it on the center of the select box...
-
-                    POINT center_pos{ (INT)(min.x + max.x / 2), (INT)(min.y + max.y / 2) };
-                    zoom_image(center_pos, 1.0f);
-                }
+                view_rect = { world_pos_from_window_pos(drag_rect.min_pos), world_pos_from_window_pos(drag_rect.max_pos) };
             }
             mouse_drag = mouse_drag_none;
             redraw();
@@ -546,9 +544,9 @@ namespace gerber_3d
 
             case mouse_drag_pan: {
                 POINT mouse_pos = get_mouse_pos(lParam);
-                double dx = (double)(mouse_pos.x - drag_mouse_cur_pos.x);
-                double dy = (double)(mouse_pos.y - drag_mouse_cur_pos.y);
-                image_pos_px = image_pos_px.add({ dx, -dy });
+                vec2d new_mouse_pos = world_pos_from_window_pos(mouse_pos);
+                vec2d old_mouse_pos = world_pos_from_window_pos(drag_mouse_cur_pos);
+                view_rect = view_rect.offset(new_mouse_pos.subtract(old_mouse_pos).negate());
                 drag_mouse_cur_pos = mouse_pos;
                 redraw();
             } break;
@@ -567,20 +565,6 @@ namespace gerber_3d
 
                 if(drag_mouse_cur_pos.x != drag_mouse_start_pos.x && drag_mouse_cur_pos.y != drag_mouse_start_pos.y) {
 
-                    //// calculate coordinates in gerber space...
-                    //{
-                    //    rect const &gerber_rect = gerber_file->image.info.extent;
-                    //    double gerber_width = width(gerber_rect);
-                    //    double gerber_height = height(gerber_rect);
-                    //    vec2d scale{ image_size_px.x / gerber_width, image_size_px.y / gerber_height };
-                    //    matrix m = make_translation({ -image_pos_px.x, -image_pos_px.y });
-                    //    m = matrix_multiply(m, make_scale({ 1 / scale.x, 1 / scale.y }));
-                    //    m = matrix_multiply(m, make_translation({ gerber_rect.min_pos.x, gerber_rect.min_pos.y }));
-                    //    vec2d mouse{ (double)drag_mouse_cur_pos.x, (double)drag_mouse_cur_pos.y, m };
-                    //    LOG_CONTEXT("MOUSE", info);
-                    //    LOG_INFO("{}", mouse);
-                    //}
-
                     double x = std::min((double)drag_mouse_start_pos.x, (double)drag_mouse_cur_pos.x);
                     double y = std::min((double)drag_mouse_start_pos.y, (double)drag_mouse_cur_pos.y);
                     double w = std::max((double)drag_mouse_start_pos.x, (double)drag_mouse_cur_pos.x) - x;
@@ -589,21 +573,10 @@ namespace gerber_3d
                     drag_rect_raw.min_pos = { x, y };
                     drag_rect_raw.max_pos = drag_rect_raw.min_pos.add({ w, h });
 
-                    double window_aspect = window_size.x / window_size.y;
-                    double drag_aspect = (double)w / (double)h;
-
-                    if(drag_aspect > window_aspect) {
-                        x += w / 2;
-                        w = h * window_aspect;
-                        x -= w / 2;
-                    } else {
-                        y += h / 2;
-                        h = w / window_aspect;
-                        y -= h / 2;
-                    }
-
-                    drag_rect.min_pos = { x, y };
-                    drag_rect.max_pos = drag_rect.min_pos.add({ w, h });
+                    RECT rc;
+                    GetClientRect(hwnd, &rc);
+                    rect window_rect{(double)rc.left, (double)rc.top, (double)rc.right, (double)rc.bottom};
+                    drag_rect = correct_aspect_ratio(aspect_ratio(window_rect), drag_rect_raw, aspect_shrink);
                     redraw();
                 }
             } break;
@@ -711,7 +684,7 @@ namespace gerber_3d
 
         bool fill = polarity == polarity_dark || polarity == polarity_positive;
 
-//        entity_id -= 1;
+        //        entity_id -= 1;
         if(gdi_entities.empty() || gdi_entities.back().entity_id != entity_id) {
             gdi_entities.emplace_back(entity_id, (int)(gdi_paths.size() - 1llu), 1, fill);
         } else {
@@ -735,6 +708,16 @@ namespace gerber_3d
                 p->AddLine((REAL)e.line_start.x, (REAL)e.line_start.y, (REAL)e.line_end.x, (REAL)e.line_end.y);
             } break;
             }
+
+            gdi_entity &entity = gdi_entities.back();
+
+            if(entity.world_space_bounds.IsEmptyArea()) {
+                p->GetBounds(&entity.world_space_bounds);
+            } else {
+                RectF path_bounds;
+                p->GetBounds(&path_bounds);
+                entity.world_space_bounds.Union(entity.world_space_bounds, entity.world_space_bounds, path_bounds);
+            }
         }
         p->CloseAllFigures();
     }
@@ -750,18 +733,16 @@ namespace gerber_3d
 
     void gdi_drawer::create_gdi_resources()
     {
-        RECT client_rect;
-        GetClientRect(hwnd, &client_rect);
+        UINT sx = (UINT)window_size.x;
+        UINT sy = (UINT)window_size.y;
 
-        if(bitmap != nullptr && bitmap->GetWidth() == (UINT)client_rect.right && bitmap->GetHeight() == (UINT)client_rect.bottom) {
+        if(bitmap != nullptr && bitmap->GetWidth() == sx && bitmap->GetHeight() == sy) {
             return;
         }
 
         release_gdi_resources();
 
-        window_size = { (double)client_rect.right, (double)client_rect.bottom };
-
-        bitmap = new Bitmap(client_rect.right, client_rect.bottom);
+        bitmap = new Bitmap(sx, sy);
         graphics = Graphics::FromImage(bitmap);
         extent_pen = new Pen(extent_color, 0);
         axes_pen = new Pen(axes_color, 0);
@@ -866,22 +847,8 @@ namespace gerber_3d
         if(gerber_file == nullptr) {
             return matrix::identity();
         }
-        rect const &gerber_rect = gerber_file->image.info.extent;
-        double gerber_width = width(gerber_rect);
-        double gerber_height = height(gerber_rect);
-        vec2d scale{ image_size_px.x / gerber_width, image_size_px.y / gerber_height };
-
-#if 0
-        // upside down (not flipped)
-        matrix mat = matrix::make_translation({ -gerber_rect.min_pos.x, -gerber_rect.min_pos.y });
-        mat = matrix::multiply(mat, matrix::make_scale({ scale.x, scale.y }));
-        return matrix::multiply(mat, matrix::make_translation({ image_pos_px.x, image_pos_px.y }));
-#else
-        // right way up (vertically flipped)
-        matrix mat = matrix::translate({ -gerber_rect.min_pos.x, -gerber_rect.min_pos.y });
-        mat = matrix::multiply(mat, matrix::scale({ scale.x, -scale.y }));
-        return matrix::multiply(mat, matrix::translate({ image_pos_px.x, window_size.y - image_pos_px.y }));
-#endif
+        rect window_rect{ { 0, 0 }, window_size };
+        return world_to_window_transform_matrix(window_rect, view_rect);
     }
 
     //////////////////////////////////////////////////////////////////////
@@ -925,20 +892,20 @@ namespace gerber_3d
 
             int path_id = entity.path_id;
             int last_path = entity.num_paths + path_id;
-            entity.bounds = RectF{0,0,0,0};
+            entity.pixel_space_bounds = RectF{ 0, 0, 0, 0 };
             for(; path_id != last_path; ++path_id) {
                 std::unique_ptr<GraphicsPath> flattened_path(gdi_paths[path_id]->Clone());
-                flattened_path->Flatten(&gdi_matrix, 2);// 2 pixel tolerance to reduce the # of points on curves
+                flattened_path->Flatten(&gdi_matrix, 2);    // 2 pixel tolerance to reduce the # of points on curves
                 int num_points = flattened_path->GetPointCount();
                 gdi_point_lists.push_back(std::vector<PointF>());
                 gdi_point_lists.back().resize(num_points);
                 flattened_path->GetPathPoints(gdi_point_lists.back().data(), num_points);
                 RectF bounds;
                 gdi_paths[path_id]->GetBounds(&bounds, &gdi_matrix, nullptr);
-                if(entity.bounds.IsEmptyArea()) {
-                    entity.bounds = bounds;
+                if(entity.pixel_space_bounds.IsEmptyArea()) {
+                    entity.pixel_space_bounds = bounds;
                 } else {
-                    RectF::Union(entity.bounds, entity.bounds, bounds);
+                    RectF::Union(entity.pixel_space_bounds, entity.pixel_space_bounds, bounds);
                 }
             }
         }

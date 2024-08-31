@@ -56,6 +56,13 @@ namespace gerber_lib
 
             //////////////////////////////////////////////////////////////////////
 
+            vec2d divide(vec2d const &v) const
+            {
+                return { x / v.x, y / v.y };
+            }
+
+            //////////////////////////////////////////////////////////////////////
+
             double length_squared() const
             {
                 return x * x + y * y;
@@ -66,6 +73,13 @@ namespace gerber_lib
             double length() const
             {
                 return sqrt(length_squared());
+            }
+
+            //////////////////////////////////////////////////////////////////////
+
+            vec2d negate() const
+            {
+                return { -x, -y };
             }
 
             //////////////////////////////////////////////////////////////////////
@@ -118,6 +132,41 @@ namespace gerber_lib
             bool contains(vec2d const &p) const
             {
                 return p.x >= min_pos.x && p.x <= max_pos.x && p.y >= min_pos.y && p.y <= max_pos.y;
+            }
+
+            //////////////////////////////////////////////////////////////////////
+
+            double x() const
+            {
+                return min_pos.x;
+            }
+
+            //////////////////////////////////////////////////////////////////////
+
+            double y() const
+            {
+                return min_pos.y;
+            }
+
+            //////////////////////////////////////////////////////////////////////
+
+            double width() const
+            {
+                return max_pos.x - min_pos.x;
+            }
+
+            //////////////////////////////////////////////////////////////////////
+
+            double height() const
+            {
+                return max_pos.y - min_pos.y;
+            }
+
+            //////////////////////////////////////////////////////////////////////
+ 
+            rect offset(vec2d o)
+            {
+                return { min_pos.add(o), max_pos.add(o) };
             }
         };
 
@@ -192,6 +241,18 @@ namespace gerber_lib
         inline vec2d size(rect const &r)
         {
             return vec2d{ width(r), height(r) };
+        }
+
+        //////////////////////////////////////////////////////////////////////
+
+        inline double aspect_ratio(rect const &r)
+        {
+            double w = width(r);
+            double h = height(r);
+            if(h != 0) {
+                return w / h;
+            }
+            return 0;
         }
 
         //////////////////////////////////////////////////////////////////////

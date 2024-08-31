@@ -41,13 +41,16 @@ namespace gerber_3d
         using RectF = Gdiplus::RectF;
         using PointF = Gdiplus::PointF;
 
+        using vec2d = gerber_lib::gerber_2d::vec2d;
+        using rect = gerber_lib::gerber_2d::rect;
+        using matrix = gerber_lib::gerber_2d::matrix;
+
         ULONG_PTR gdiplus_token{};
 
         void save_settings() const;
         void load_settings();
 
-        gerber_lib::gerber_2d::vec2d image_pos_px{};    // image position on screen in pixels
-        gerber_lib::gerber_2d::vec2d image_size_px{};   // image size on screen in pixels
+        rect view_rect;
 
         HWND hwnd{};
         HWND status_hwnd{};
@@ -60,7 +63,7 @@ namespace gerber_3d
             draw_mode_both = 3
         };
 
-        int draw_mode{ draw_mode_shaded  | draw_mode_wireframe };
+        int draw_mode{ draw_mode_shaded | draw_mode_wireframe };
 
         enum mouse_drag_action
         {
@@ -79,8 +82,8 @@ namespace gerber_3d
         bool show_extent{ true };
         bool show_axes{ true };
 
-        gerber_lib::gerber_2d::rect drag_rect_raw;
-        gerber_lib::gerber_2d::rect drag_rect;
+        rect drag_rect_raw;
+        rect drag_rect;
 
         size_t solid_color_index{ 1 };
 
@@ -124,7 +127,7 @@ namespace gerber_3d
         Brush *info_text_foregound_brush{ nullptr };
         Font *info_text_font{ nullptr };
 
-        gerber_lib::gerber_2d::vec2d window_size;
+        vec2d window_size;
 
         void create_gdi_resources();
         void release_gdi_resources();
@@ -137,12 +140,13 @@ namespace gerber_3d
             int path_id{};
             int num_paths{};
             bool fill{};
-            RectF bounds{};
+            RectF pixel_space_bounds{};    // screen space bounding rectangle
+            RectF world_space_bounds{};    // for zooming into it
 
             gdi_entity() = default;
 
             gdi_entity(int entity_id, int path_id, int num_paths, bool fill)
-                : entity_id(entity_id), path_id(path_id), num_paths(num_paths), fill(fill), bounds{}
+                : entity_id(entity_id), path_id(path_id), num_paths(num_paths), fill(fill), pixel_space_bounds{}
             {
             }
         };
@@ -154,8 +158,10 @@ namespace gerber_3d
         std::vector<int> entities_clicked;
         size_t selected_entity_index;
 
-        gerber_lib::gerber_2d::matrix get_transform_matrix() const;
-        gerber_lib::gerber_2d::vec2d world_pos_from_window_pos(POINT const &window_pos) const;
+        matrix get_transform_matrix() const;
+        vec2d world_pos_from_window_pos(POINT const &window_pos) const;
+        vec2d world_pos_from_window_pos(vec2d const &window_pos) const;
+        vec2d window_pos_from_world_pos(vec2d const &world_pos) const;
 
         gerber_3d::occ_drawer occ;
 
@@ -171,7 +177,7 @@ namespace gerber_3d
         void redraw() const;
 
         void zoom_image(POINT const &pos, double zoom_scale);
-        void set_default_zoom();
+        void zoom_to_rect(gerber_lib::rect const &zoom_rect);
 
         std::string get_open_filename();
 
