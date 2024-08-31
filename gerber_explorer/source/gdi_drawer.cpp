@@ -128,10 +128,13 @@ namespace gerber_3d
 
     //////////////////////////////////////////////////////////////////////
 
-    void gdi_drawer::zoom_to_rect(rect const &zoom_rect)
+    void gdi_drawer::zoom_to_rect(rect const &zoom_rect, double border_ratio)
     {
         rect window_rect{ { 0, 0 }, window_size };
-        view_rect = correct_aspect_ratio(aspect_ratio(window_rect), zoom_rect, aspect_expand);
+        rect new_rect = correct_aspect_ratio(aspect_ratio(window_rect), zoom_rect, aspect_expand);
+        vec2d mid = mid_point(new_rect);
+        vec2d siz = size(new_rect).scale(border_ratio / 2);
+        view_rect = { mid.subtract(siz), mid.add(siz) };
     }
 
     //////////////////////////////////////////////////////////////////////

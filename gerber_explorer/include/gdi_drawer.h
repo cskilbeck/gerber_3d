@@ -177,7 +177,7 @@ namespace gerber_3d
         void redraw() const;
 
         void zoom_image(POINT const &pos, double zoom_scale);
-        void zoom_to_rect(gerber_lib::rect const &zoom_rect);
+        void zoom_to_rect(gerber_lib::rect const &zoom_rect, double border_ratio = 1.1);
 
         std::string get_open_filename();
 
