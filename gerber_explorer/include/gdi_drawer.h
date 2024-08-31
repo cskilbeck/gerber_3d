@@ -128,6 +128,7 @@ namespace gerber_3d
         Font *info_text_font{ nullptr };
 
         vec2d window_size;
+        rect window_rect;
 
         void create_gdi_resources();
         void release_gdi_resources();
