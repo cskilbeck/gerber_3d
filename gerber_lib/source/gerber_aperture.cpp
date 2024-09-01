@@ -637,29 +637,29 @@ namespace gerber_lib
 
     //////////////////////////////////////////////////////////////////////
 
-    std::string gerber_aperture::get_description() const
+    std::string gerber_aperture::get_description(double scale, std::string const &units) const
     {
         switch(aperture_type) {
         case aperture_type_none: {
-            return "none?";
+            return "None";
         } break;
         case aperture_type_circle: {
-            return std::format("{}, radius {}", aperture_type, parameters[0]);
+            return std::format("Circle, radius {:8.4f}{}", parameters[0] / scale, units);
         } break;
         case aperture_type_rectangle: {
-            return std::format("{}, {}x{}", aperture_type, parameters[0], parameters[1]);
+            return std::format("Rect, {:8.4f}x{:8.4f}{}", parameters[0] / scale, parameters[1] / scale, units);
         } break;
         case aperture_type_oval: {
-            return std::format("{}, {}x{}", aperture_type, parameters[0], parameters[1]);
+            return std::format("Oval, {:8.4f}x{:8.4f}", parameters[0] / scale, parameters[1] / scale, units);
         } break;
         case aperture_type_polygon: {
-            return std::format("{}", aperture_type);
+            return std::format("Polygon");
         } break;
         case aperture_type_macro: {
-            return std::format("{}", aperture_type);
+            return std::format("Macro");
         } break;
         default:
-            return std::format("invalid aperture type {}", (int)aperture_type);
+            return std::format("Nnvalid {} ?", (int)aperture_type);
         }
     }
 

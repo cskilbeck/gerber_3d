@@ -58,4 +58,5 @@
     GERBER_ERROR_CODE(syntax_error)                 \
     GERBER_ERROR_CODE(empty_file)                   \
     GERBER_ERROR_CODE(bad_file_offset)              \
-    GERBER_ERROR_CODE(file_not_found)
+    GERBER_ERROR_CODE(file_not_found)               \
+    GERBER_ERROR_CODE(missing_attribute)

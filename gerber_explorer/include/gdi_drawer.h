@@ -55,6 +55,12 @@ namespace gerber_3d
         HWND hwnd{};
         HWND status_hwnd{};
 
+        enum display_units
+        {
+            display_units_millimeters,
+            display_units_inches
+        };
+
         enum gdi_draw_mode
         {
             draw_mode_none = 0,
@@ -156,6 +162,12 @@ namespace gerber_3d
             {
             }
         };
+
+        display_units units = display_units_millimeters;
+
+        double get_units() const;
+        double convert_units(double x) const;
+        std::string units_string() const;
 
         std::vector<GraphicsPath *> gdi_paths;
         std::vector<gdi_entity> gdi_entities;

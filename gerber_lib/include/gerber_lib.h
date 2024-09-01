@@ -56,7 +56,11 @@ namespace gerber_lib
         gerber_state state{};
         gerber_reader reader{};
 
+        std::map<std::string, std::string> dictionary;
+
         std::vector<gerber_entity> entities;
+
+        gerber_entity &add_entity();
 
         bool is_gerber_274d(std::string file_path)
         {

@@ -35,7 +35,6 @@ namespace
 
     using Gdiplus::REAL;
 
-
     Color const debug_color{ 255, 0, 0, 0 };
 
     //////////////////////////////////////////////////////////////////////
@@ -302,6 +301,37 @@ namespace gerber_3d
 
     //////////////////////////////////////////////////////////////////////
 
+    double gdi_drawer::get_units() const
+    {
+        switch(units) {
+        case display_units_inches:
+            return 25.4;
+        default:
+            return 1;
+        }
+    }
+
+    //////////////////////////////////////////////////////////////////////
+
+    double gdi_drawer::convert_units(double x) const
+    {
+        return x / get_units();
+    }
+
+    //////////////////////////////////////////////////////////////////////
+
+    std::string gdi_drawer::units_string() const
+    {
+        switch(units) {
+        case display_units_inches:
+            return "in";
+        default:
+            return "mm";
+        }
+    }
+
+    //////////////////////////////////////////////////////////////////////
+
     void gdi_drawer::zoom_image(vec2d const &pos, double zoom_scale)
     {
         // normalized position within view_rect
@@ -441,6 +471,10 @@ namespace gerber_3d
 
             switch(LOWORD(wParam)) {
 
+            case 27:
+                DestroyWindow(hwnd);
+                break;
+
             case 'W':
                 draw_mode ^= (int)draw_mode_wireframe;
                 if(draw_mode == 0) {
@@ -463,10 +497,6 @@ namespace gerber_3d
                     logger.set_gerber(gerber_file);
                     gerber_file->draw(logger);
                 }
-                break;
-
-            case 27:
-                DestroyWindow(hwnd);
                 break;
 
             case 'F':
@@ -494,6 +524,15 @@ namespace gerber_3d
                     }
                     redraw();
                 }
+                break;
+
+            case 'Q':
+                if(units == display_units_inches) {
+                    units = display_units_millimeters;
+                } else {
+                    units = display_units_inches;
+                }
+                redraw();
                 break;
 
             case 'O':
@@ -695,7 +734,7 @@ namespace gerber_3d
 
                 if(drag_mouse_cur_pos.x != drag_mouse_start_pos.x && drag_mouse_cur_pos.y != drag_mouse_start_pos.y) {
 
-                    drag_rect_raw = { drag_mouse_start_pos, drag_mouse_cur_pos };
+                    drag_rect_raw = rect{ drag_mouse_start_pos, drag_mouse_cur_pos }.normalize();
                     drag_rect = correct_aspect_ratio(aspect_ratio(window_rect), drag_rect_raw, aspect_expand);
                     redraw();
                 }
@@ -705,7 +744,7 @@ namespace gerber_3d
                 entities_clicked.clear();
                 highlight_entity = false;
                 drag_mouse_cur_pos = pos_from_lparam(lParam);
-                drag_rect = { drag_mouse_start_pos, drag_mouse_cur_pos };
+                drag_rect = rect{ drag_mouse_start_pos, drag_mouse_cur_pos };
                 select_entities(drag_rect);
                 redraw();
             } break;
@@ -1137,8 +1176,8 @@ namespace gerber_3d
                 aperture_info = "None";
             } else {
                 gerber_aperture *aperture = f->second;
-                aperture_info = std::format("D{} - {}", aperture->aperture_number, aperture->get_description());
-                net_info = std::format("At {}", net->end);
+                aperture_info = std::format("D{} - {}", aperture->aperture_number, aperture->get_description(get_units(), units_string()));
+                net_info = std::format("At {:9.5f},{:9.5f}{}", convert_units(net->end.x), convert_units(net->end.y), units_string());
 
                 // net->aperture_state should be aperture_state_flash at this point...
             }
@@ -1147,20 +1186,36 @@ namespace gerber_3d
             if(net->aperture_state == aperture_state_flash) {
                 draw = "Flash";
             } else {
-                draw = std::format("{}", net->interpolation_method);
                 switch(net->interpolation_method) {
                 case interpolation_linear:
-                    net_info = std::format("From {}\n  To {}", net->start, net->end);
+                    draw = "Linear";
+                    net_info = std::format("From {:9.5f},{:9.5f}{}\n  To {:9.5f},{:9.5f}{}", convert_units(net->start.x), convert_units(net->start.y),
+                                           units_string(), convert_units(net->end.x), convert_units(net->end.y), units_string());
                     break;
                 case interpolation_clockwise_circular:
+                    draw = "Clockwise";
+                    net_info = std::format("At {:9.5f},{:9.5f}{}\nRadius {:6.4f}{}\nFrom {:5.1f}\n  To {:5.1f}", convert_units(net->circle_segment.pos.x),
+                                           convert_units(net->circle_segment.pos.y), units_string(), convert_units(net->circle_segment.size.x), units_string(),
+                                           net->circle_segment.start_angle, net->circle_segment.end_angle);
+                    break;
                 case interpolation_counterclockwise_circular:
-                    net_info = std::format("At {}\nRadius {:5.3f}\nFrom {:5.1f}\n  To {:5.1f}", net->circle_segment.pos, net->circle_segment.size.x,
+                    draw = "Counter clockwise";
+                    net_info = std::format("At {:9.5f},{:9.5f}{}\nRadius {:6.4f}{}\nFrom {:5.1f}\n  To {:5.1f}", convert_units(net->circle_segment.pos.x),
+                                           convert_units(net->circle_segment.pos.y), units_string(), convert_units(net->circle_segment.size.x), units_string(),
                                            net->circle_segment.start_angle, net->circle_segment.end_angle);
                     break;
                 case interpolation_region_start:
+                    draw = "Region";
                     net_info = std::format("{} points", net->num_region_points);
                     break;
                 }
+            }
+
+            std::string attributes;
+            char const *sep = "";
+            for(auto const &kvp : entity.attributes) {
+                attributes = std::format("{}{}{}={}", attributes, sep, kvp.first, kvp.second);
+                sep = "\n";
             }
 
             std::string text = std::format("Entity {:4d} {}\n"    //
@@ -1168,12 +1223,14 @@ namespace gerber_3d
                                            "Draw {}\n"            //
                                            "{}\n"                 //
                                            "Polarity {}\n"        //
+                                           "{}\n"                 //
                                            ,
                                            highlight_entity_id, line,    //
                                            aperture_info,                //
                                            draw,                         //
                                            net_info,                     //
-                                           net->level->polarity);
+                                           net->level->polarity,         //
+                                           attributes);
 
             std::wstring wide_text = utf16_from_utf8(text);
 

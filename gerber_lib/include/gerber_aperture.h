@@ -105,7 +105,7 @@ namespace gerber_lib
                                macro_parameters_list.size());
         }
 
-        std::string get_description() const;
+        std::string get_description(double scale, std::string const &units) const;
 
         gerber_aperture() = default;
 

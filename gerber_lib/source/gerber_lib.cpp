@@ -237,6 +237,7 @@ namespace gerber_lib
 
     void gerber::cleanup()
     {
+        dictionary.clear();
         filename = std::string{};
         image.cleanup();
         stats.cleanup();
@@ -584,6 +585,37 @@ namespace gerber_lib
             }
         } break;
 
+        case 'TO': {
+            std::string obj_attr;
+            reader.read_until(&obj_attr, '*');
+            std::vector<std::string> tokens;
+            tokenize(obj_attr, tokens, ",", tokenize_keep_empty);
+            if(tokens.size() < 2) {
+                stats.error(reader, error_malformed_command, "expected attribute_name,attribute_value, got {}", obj_attr);
+            } else {
+                std::string s = join(std::span(tokens).subspan(1), ",");
+                LOG_DEBUG("TOKEN ATTR[{}] = {}", tokens[0], s);
+                dictionary[tokens[0]] = s;
+             }
+        } break;
+
+        case 'TD': {
+            std::string attribute_to_clear;
+            reader.read_until(&attribute_to_clear, '*');
+            if(attribute_to_clear.empty()) {
+                LOG_DEBUG("Clear attribute dictionary");
+                dictionary.clear();
+            } else {
+                LOG_DEBUG("Delete attribute: \"{}\"", attribute_to_clear);
+                auto f = dictionary.find(attribute_to_clear);
+                if(f == dictionary.end()) {
+                    stats.error(reader, error_missing_attribute, "Can't find {}", attribute_to_clear);
+                } else {
+                    dictionary.erase(attribute_to_clear);
+                }
+            }
+        } break;
+
             //////////////////////////////////////////////////////////////////////
             // FS: format specification
 
@@ -716,6 +748,7 @@ namespace gerber_lib
                 }
                 CHECK(reader.read_char(&c));
             }
+            reader.rewind(1);
         } break;
 
             //////////////////////////////////////////////////////////////////////
@@ -1576,6 +1609,16 @@ namespace gerber_lib
 
     //////////////////////////////////////////////////////////////////////
 
+    gerber_entity &gerber::add_entity()
+    {
+        entities.emplace_back(reader.line_number, reader.line_number, image.nets.size());
+        gerber_entity &e = entities.back();
+        e.attributes = dictionary;
+        return e;
+    }
+
+    //////////////////////////////////////////////////////////////////////
+
     gerber_error_code gerber::parse_gerber_segment(gerber_net *net)
     {
         LOG_CONTEXT("parse_segment", info);
@@ -1731,11 +1774,11 @@ namespace gerber_lib
                     if(state.interpolation == interpolation_region_end) {
                         if(entities.empty()) {
                             LOG_ERROR("Huh? Wheres the entity man?");
-                            entities.emplace_back(reader.line_number, reader.line_number, image.nets.size());
+                            add_entity();
                         }
                         entities.back().line_number_end = reader.line_number;
-                        LOG_VERBOSE("ENTITY {} ENDS: {}", entity_id, entities.back());
                         entity_id += 1;
+                        LOG_VERBOSE("ENTITY {} ENDS: {}", entity_id, entities.back());
                     }
                 } else
                     switch(state.aperture_state) {
@@ -1747,12 +1790,12 @@ namespace gerber_lib
                         case interpolation_linear:
                         case interpolation_clockwise_circular:
                         case interpolation_counterclockwise_circular:
-                            entities.emplace_back(reader.line_number, reader.line_number, image.nets.size());
+                            add_entity();
                             LOG_VERBOSE("ENTITY {} OCCURS: {}", entity_id, entities.back());
                             entity_id += 1;
                             break;
                         case interpolation_region_start:
-                            entities.emplace_back(reader.line_number, reader.line_number, image.nets.size());
+                            add_entity();
                             LOG_VERBOSE("ENTITY {} OCCURS: {}", entity_id, entities.back());
                             break;
                         case interpolation_region_end:
@@ -1762,7 +1805,7 @@ namespace gerber_lib
                         break;
 
                     case aperture_state_flash:
-                        entities.emplace_back(reader.line_number, reader.line_number, image.nets.size());
+                        add_entity();
                         LOG_VERBOSE("ENTITY {} OCCURS: {}", entity_id, entities.back());
                         entity_id += 1;
                         break;
@@ -2298,9 +2341,10 @@ namespace gerber_lib
             // just draw a rectangle at start pos
             draw_rectangle(start.subtract(size), start.add(size));
         } else if(start.x == end.x) {
+            // draw vertical
             draw_rectangle({ start.x - w, std::min(start.y, end.y) - h }, { start.x + w, std::max(start.y, end.y) + h });
         } else if(start.y == end.y) {
-            // draw wide
+            // draw horizontal
             draw_rectangle({ std::min(start.x, end.x) - w, start.y - h }, { std::max(start.x, end.x) + w, start.y + h });
         } else {
             // draw 6 sided shape
@@ -2447,7 +2491,7 @@ namespace gerber_lib
 
     gerber_error_code gerber::draw_capsule(gerber_draw_interface &drawer, gerber_net *net, double width, double height) const
     {
-        vec2d const &center = net->start;
+        vec2d const &center = net->end;
         gerber_draw_element el[4];
 
         double w2 = width / 2;
@@ -2456,7 +2500,9 @@ namespace gerber_lib
         vec2d tl1{ center.x - w2, center.y - h2 };
         vec2d br1{ center.x + w2, center.y + h2 };
 
-        if(width > height) {
+        if(fabs(width - height) < 1e-6) {
+            draw_circle(drawer, net, center, w2);
+        } else if(width > height) {
             vec2d tl2{ tl1.x + h2, tl1.y };
             vec2d br2{ br1.x - h2, br1.y };
             el[0] = gerber_draw_element({ tl2.x, center.y }, 90, 270, h2);
@@ -2478,10 +2524,11 @@ namespace gerber_lib
 
     //////////////////////////////////////////////////////////////////////
 
-    gerber_error_code gerber::draw_rectangle(gerber_draw_interface &drawer, gerber_net *net, rect const &r) const
+    gerber_error_code gerber::draw_rectangle(gerber_draw_interface &drawer, gerber_net *net, rect const &rc) const
     {
-        vec2d bottom_right{ r.max_pos.x, r.min_pos.y };
-        vec2d top_left{ r.min_pos.x, r.max_pos.y };
+        rect r = { rc.min_pos.add(net->end), rc.max_pos.add(net->end) };
+        vec2d bottom_right = vec2d{ r.max_pos.x, r.min_pos.y };
+        vec2d top_left = vec2d{ r.min_pos.x, r.max_pos.y };
         gerber_draw_element el[4];
         el[0] = gerber_draw_element(r.min_pos, bottom_right);
         el[1] = gerber_draw_element(bottom_right, r.max_pos);
@@ -2595,10 +2642,10 @@ namespace gerber_lib
                         case aperture_type_rectangle: {
 
                             if(!should_hide(hide_element_rectangles)) {
-                                FAIL_IF(aperture->parameters.size() < 4, error_bad_parameter_count);
+                                // FAIL_IF(aperture->parameters.size() < 4, error_bad_parameter_count);
                                 double p0 = (float)aperture->parameters[0];
                                 double p1 = (float)aperture->parameters[1];
-                                rect aperture_rect(-(p0 / 2), -(p1 / 2), p0, p1);
+                                rect aperture_rect(-(p0 / 2), -(p1 / 2), p0 / 2, p1 / 2);
                                 CHECK(draw_rectangle(drawer, net, aperture_rect));
                                 // path.AddRectangle(apertureRectangle);
                                 // DrawAperatureHole(path, p2, p3);
