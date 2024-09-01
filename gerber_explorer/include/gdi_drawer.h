@@ -106,6 +106,7 @@ namespace gerber_3d
         static Color const info_text_background_color;
         static Color const info_text_foreground_color;
         static Color const select_color[3];
+        static Color const wireframe_color;
 
         gerber_lib::gerber *gerber_file{};
 
@@ -119,6 +120,7 @@ namespace gerber_3d
         Pen *select_outline_pen{ nullptr };
         Pen *thin_pen{ nullptr };
         Pen *select_pen[3]{ nullptr };
+        Pen *wireframe_pen{ nullptr };
         Brush *select_fill_brush{ nullptr };
         Brush *select_whole_fill_brush{ nullptr };
         Brush *fill_brush[2]{ nullptr, nullptr };
@@ -140,12 +142,12 @@ namespace gerber_3d
 
         struct gdi_entity
         {
-            int entity_id{};
-            int path_id{};
-            int num_paths{};
-            bool fill{};
+            int entity_id{};               // index into gdi_entities
+            int path_id{};                 // index into gdi_paths
+            int num_paths{};               // # of paths in this entity
+            bool fill{};                   // fill (true) or clear (false)
+            bool selected{};               // highlighted entities are selected when mouse released
             RectF pixel_space_bounds{};    // screen space bounding rectangle
-            RectF world_space_bounds{};    // for zooming into it
 
             gdi_entity() = default;
 
@@ -159,10 +161,13 @@ namespace gerber_3d
         std::vector<gdi_entity> gdi_entities;
         std::vector<std::vector<PointF>> gdi_point_lists;
 
+        std::vector<int> selected_entities;
+
         std::vector<int> entities_clicked;
         size_t selected_entity_index;
 
-        matrix get_transform_matrix() const;
+        matrix world_to_window_matrix;
+
         vec2d world_pos_from_window_pos(vec2d const &window_pos) const;
         vec2d window_pos_from_world_pos(vec2d const &world_pos) const;
 
@@ -171,6 +176,7 @@ namespace gerber_3d
         void on_left_click(vec2d const &mouse_pos);
 
         void draw_all_entities();
+        void draw_selected_entities();
 
         void draw_entity(gdi_entity const &entity, Brush *brush, Pen *pen);
 
@@ -183,6 +189,8 @@ namespace gerber_3d
         void zoom_to_rect(gerber_lib::rect const &zoom_rect, double border_ratio = 1.1);
 
         std::string get_open_filename();
+
+        void select_entities(rect const &r);
 
         LRESULT wnd_proc(UINT message, WPARAM wParam, LPARAM lParam);
         static LRESULT CALLBACK wnd_proc_proxy(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam);

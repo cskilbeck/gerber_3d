@@ -33,102 +33,23 @@ namespace
     using Gdiplus::RectF;
     using Gdiplus::SolidBrush;
 
+    using Gdiplus::REAL;
+
+
     Color const debug_color{ 255, 0, 0, 0 };
+
+    //////////////////////////////////////////////////////////////////////
+
+    void set_gdi_matrix(matrix const &s, Matrix &d)
+    {
+        d.SetElements((REAL)s.A, (REAL)s.B, (REAL)s.C, (REAL)s.D, (REAL)s.X, (REAL)s.Y);
+    }
 
     //////////////////////////////////////////////////////////////////////
 
     vec2d pos_from_lparam(LPARAM lParam)
     {
         return vec2d{ (double)GET_X_LPARAM(lParam), (double)GET_Y_LPARAM(lParam) };
-    }
-
-    //////////////////////////////////////////////////////////////////////
-    // length is guaranteed to be positive. i.e. the point pos is at the bottom of the vertical line
-
-    bool vertical_line_intersects(PointF const &pos, float length, PointF const &b1, PointF const &b2)
-    {
-        float py = pos.Y;
-        if(length < 0) {
-            length = -length;
-            py -= length;
-        }
-        float d1y = b1.Y - py;
-        float d2y = b2.Y - py;
-        if(d1y < 0 && d2y < 0 || d1y > length && d2y > length) {
-            return false;
-        }
-        float d1x = b1.X - pos.X;
-        float d2x = b2.X - pos.X;
-        if(d1x < 0 && d2x < 0 || d1x > 0 && d2x > 0) {
-            return false;
-        }
-        float dx = b2.X - b1.X;
-        if(dx == 0) {
-            return false;
-        }
-        float dy = b2.Y - b1.Y;
-        float slope = dy / dx;
-        float delta_x = pos.X - b1.X;
-        float y = b1.Y + delta_x * slope - py;
-        return y >= 0 && y < length;
-    }
-
-    //////////////////////////////////////////////////////////////////////
-
-    bool horizontal_line_intersects(PointF const &pos, float length, PointF const &b1, PointF const &b2)
-    {
-        float px = pos.X;
-        if(length < 0) {
-            length = -length;
-            px -= length;
-        }
-        float d1x = b1.X - px;
-        float d2x = b2.X - px;
-        if(d1x < 0 && d2x < 0 || d1x > length && d2x > length) {
-            return false;
-        }
-        float d1y = b1.Y - pos.Y;
-        float d2y = b2.Y - pos.Y;
-        if(d1y < 0 && d2y < 0 || d1y > 0 && d2y > 0) {
-            return false;
-        }
-        float dy = b2.Y - b1.Y;
-        if(dy == 0) {
-            return false;
-        }
-        float dx = b2.X - b1.X;
-        float slope = dx / dy;
-        float delta_y = pos.Y - b1.Y;
-        float x = b1.X + delta_y * slope - px;
-        return x >= 0 && x < length;
-    }
-
-    //////////////////////////////////////////////////////////////////////
-
-    bool rect_intersects_with_polygon(PointF const *polygon_points, size_t num_polygon_points, RectF const &r)
-    {
-        PointF bl{ r.X, r.Y };
-        PointF br{ r.X + r.Width, r.Y };
-        PointF tl{ r.X, r.Y + r.Height };
-        float width = r.Width;
-        float height = r.Height;
-        for(size_t n = 0; n < num_polygon_points; ++n) {
-            PointF const &a = polygon_points[n];
-            PointF const &b = polygon_points[(n + 1) % num_polygon_points];
-            if(horizontal_line_intersects(bl, width, a, b)) {
-                return true;
-            }
-            if(horizontal_line_intersects(tl, width, a, b)) {
-                return true;
-            }
-            if(vertical_line_intersects(br, height, a, b)) {
-                return true;
-            }
-            if(vertical_line_intersects(bl, height, a, b)) {
-                return true;
-            }
-        }
-        return false;
     }
 
     //////////////////////////////////////////////////////////////////////
@@ -154,6 +75,79 @@ namespace
             }
         }
         return inside;
+    }
+
+    //////////////////////////////////////////////////////////////////////
+    // length is guaranteed to be positive. i.e. the point pos is at the bottom of the vertical line
+
+    bool vertical_line_intersects(PointF const &pos, float length, PointF const &b1, PointF const &b2)
+    {
+        float py = pos.Y;
+        if(length < 0) {
+            length = -length;
+            py -= length;
+        }
+        float d1y = b1.Y - py;
+        float d2y = b2.Y - py;
+        if(d1y < 0 && d2y < 0 || d1y > length && d2y > length) {
+            return false;
+        }
+        float d1x = b1.X - pos.X;
+        float d2x = b2.X - pos.X;
+        if(d1x < 0 && d2x < 0 || d1x > 0 && d2x > 0) {
+            return false;
+        }
+        float dx = b2.X - b1.X;
+        if(dx == 0) {
+            return pos.X == b1.X;
+        }
+        float dy = b2.Y - b1.Y;
+        float slope = dy / dx;
+        float delta_x = pos.X - b1.X;
+        float y = b1.Y + delta_x * slope - py;
+        return y >= 0 && y < length;
+    }
+
+    //////////////////////////////////////////////////////////////////////
+
+    bool horizontal_line_intersects(PointF const &pos, float length, PointF const &b1, PointF const &b2)
+    {
+        return vertical_line_intersects({ pos.Y, pos.X }, length, { b1.Y, b1.X }, { b2.Y, b2.X });
+    }
+
+    //////////////////////////////////////////////////////////////////////
+    // This assumes the polygon is closed (i.e. last point == first point)
+
+    bool rect_intersects_with_polygon(PointF const *polygon_points, size_t num_polygon_points, RectF const &r)
+    {
+        PointF bl{ r.X, r.Y };
+        PointF br{ r.X + r.Width, r.Y };
+        PointF tl{ r.X, r.Y + r.Height };
+        PointF tr{ br.X, tl.Y };
+
+        float width = r.Width;
+        float height = r.Height;
+
+        for(size_t i = 0; i < num_polygon_points - 1; i++) {
+
+            PointF const &a = polygon_points[i];
+            PointF const &b = polygon_points[i + 1];
+
+            if(horizontal_line_intersects(bl, width, a, b)) {
+                return true;
+            }
+            if(horizontal_line_intersects(tl, width, a, b)) {
+                return true;
+            }
+            if(vertical_line_intersects(br, height, a, b)) {
+                return true;
+            }
+            if(vertical_line_intersects(bl, height, a, b)) {
+                return true;
+            }
+        }
+        return is_point_in_polygon(polygon_points, num_polygon_points, bl) && is_point_in_polygon(polygon_points, num_polygon_points, br) &&
+               is_point_in_polygon(polygon_points, num_polygon_points, tl) && is_point_in_polygon(polygon_points, num_polygon_points, tl);
     }
 
     //////////////////////////////////////////////////////////////////////
@@ -187,10 +181,10 @@ namespace
 
     matrix world_to_window_transform_matrix(rect const &window, rect const &view)
     {
-        matrix flip = matrix::scale({ 1, -1 });
-        matrix offset = matrix::translate({ 0, height(window) });
         matrix origin = matrix::translate(view.min_pos.negate());
         matrix scale = matrix::scale({ window.width() / view.width(), window.height() / view.height() });
+        matrix flip = matrix::scale({ 1, -1 });
+        matrix offset = matrix::translate({ 0, height(window) });
 
         matrix m = matrix::identity();
         m = matrix::multiply(m, origin);
@@ -211,15 +205,13 @@ namespace gerber_3d
     Color const gdi_drawer::axes_color{ 255, 0, 0, 0 };
     Color const gdi_drawer::origin_color{ 255, 255, 0, 0 };
     Color const gdi_drawer::extent_color{ 255, 64, 64, 255 };
-
     Color const gdi_drawer::zoom_select_outline_color{ 32, 255, 0, 0 };
     Color const gdi_drawer::zoom_select_fill_color{ 32, 64, 64, 255 };
     Color const gdi_drawer::zoom_select_whole_fill_color{ 64, 0, 255, 0 };
-
-    Color const gdi_drawer::info_text_background_color{ 192, 0, 0, 0 };
+    Color const gdi_drawer::info_text_background_color{ 160, 0, 0, 0 };
     Color const gdi_drawer::info_text_foreground_color{ 255, 255, 255, 255 };
-
     Color const gdi_drawer::select_color[3] = { Color{ 128, 0, 0, 0 }, Color{ 255, 0, 224, 255 }, Color{ 255, 0, 255, 128 } };
+    Color const gdi_drawer::wireframe_color{ 255, 0, 0, 0 };
 
     //////////////////////////////////////////////////////////////////////
 
@@ -298,14 +290,14 @@ namespace gerber_3d
 
     vec2d gdi_drawer::world_pos_from_window_pos(vec2d const &window_pos) const
     {
-        return vec2d{ window_pos, matrix::invert(get_transform_matrix()) };
+        return vec2d{ window_pos, matrix::invert(world_to_window_matrix) };
     }
 
     //////////////////////////////////////////////////////////////////////
 
     vec2d gdi_drawer::window_pos_from_world_pos(vec2d const &world_pos) const
     {
-        return vec2d{ world_pos, get_transform_matrix() };
+        return vec2d{ world_pos, world_to_window_matrix };
     }
 
     //////////////////////////////////////////////////////////////////////
@@ -326,6 +318,23 @@ namespace gerber_3d
         vec2d top_right = bottom_left.add(new_size);
         view_rect = { bottom_left, top_right };
         redraw();
+    }
+
+    //////////////////////////////////////////////////////////////////////
+
+    void gdi_drawer::select_entities(rect const &r)
+    {
+        rect p = r.normalize();
+        RectF selection_rect{ (float)p.min_pos.x, (float)p.min_pos.y, (float)p.width(), (float)p.height() };
+        for(auto &entity : gdi_entities) {
+            int path_id = entity.path_id;
+            for(int n = 0; n < entity.num_paths; ++n) {
+                std::vector<PointF> const &gdi_points = gdi_point_lists[path_id];
+                entity.selected =
+                    selection_rect.Contains(entity.pixel_space_bounds) || rect_intersects_with_polygon(gdi_points.data(), gdi_points.size(), selection_rect);
+                path_id += 1;
+            }
+        }
     }
 
     //////////////////////////////////////////////////////////////////////
@@ -385,7 +394,17 @@ namespace gerber_3d
                 // Same set, cycle to the next entity down
                 selected_entity_index = std::min(selected_entity_index - 1, entities_clicked.size() - 1);
             }
-            highlight_entity_id = entities_clicked[selected_entity_index];
+            gdi_entity &e = gdi_entities[entities_clicked[selected_entity_index]];
+            e.selected = !e.selected;
+            if(e.selected) {
+                highlight_entity_id = entities_clicked[selected_entity_index];
+            } else {
+                highlight_entity = false;
+            }
+        } else {
+            for(auto &e : gdi_entities) {
+                e.selected = false;
+            }
         }
         redraw();
     }
@@ -452,9 +471,23 @@ namespace gerber_3d
 
             case 'F':
                 if(gerber_file != nullptr) {
-                    if(highlight_entity) {
-                        RectF const &r = gdi_entities[highlight_entity_id].world_space_bounds;
-                        rect zoom_rect{ (REAL)r.X, (REAL)r.Y, (REAL)(r.X + r.Width), (REAL)(r.Y + r.Height) };
+                    RectF r{};
+                    for(gdi_entity const &e : gdi_entities) {
+                        if(e.selected) {
+                            if(r.IsEmptyArea()) {
+                                r = e.pixel_space_bounds;
+                            } else {
+                                r.Union(r, r, e.pixel_space_bounds);
+                            }
+                        }
+                    }
+                    LOG_INFO("{},{} {}x{}", r.X, r.Y, r.Width, r.Height);
+                    if(!r.IsEmptyArea()) {
+                        vec2d s{ r.X, r.Y + r.Height };
+                        vec2d t{ r.X + r.Width, r.Y };
+                        s = world_pos_from_window_pos(s);
+                        t = world_pos_from_window_pos(t);
+                        rect zoom_rect{ s, t };
                         zoom_to_rect(zoom_rect);
                     } else {
                         zoom_to_rect(gerber_file->image.info.extent);
@@ -578,13 +611,12 @@ namespace gerber_3d
                 drag_mouse_start_pos = mouse_pos;
                 drag_rect = {};
                 SetCapture(hwnd);
-            } else if((GetKeyState(VK_SHIFT) & 0x8000) != 0) {
-                mouse_drag = mouse_drag_select;
-                drag_mouse_start_pos = mouse_pos;
-                drag_rect = {};
-                SetCapture(hwnd);
-            } else {
+            } else if((GetKeyState(VK_SHIFT) & 0x8000) == 0) {
                 on_left_click(mouse_pos);
+                mouse_drag = mouse_drag_select;
+                drag_rect = {};
+                drag_mouse_start_pos = mouse_pos;
+                SetCapture(hwnd);
             }
         } break;
 
@@ -663,13 +695,7 @@ namespace gerber_3d
 
                 if(drag_mouse_cur_pos.x != drag_mouse_start_pos.x && drag_mouse_cur_pos.y != drag_mouse_start_pos.y) {
 
-                    double x = std::min((double)drag_mouse_start_pos.x, (double)drag_mouse_cur_pos.x);
-                    double y = std::min((double)drag_mouse_start_pos.y, (double)drag_mouse_cur_pos.y);
-                    double w = std::max((double)drag_mouse_start_pos.x, (double)drag_mouse_cur_pos.x) - x;
-                    double h = std::max((double)drag_mouse_start_pos.y, (double)drag_mouse_cur_pos.y) - y;
-
-                    drag_rect_raw.min_pos = { x, y };
-                    drag_rect_raw.max_pos = drag_rect_raw.min_pos.add({ w, h });
+                    drag_rect_raw = { drag_mouse_start_pos, drag_mouse_cur_pos };
                     drag_rect = correct_aspect_ratio(aspect_ratio(window_rect), drag_rect_raw, aspect_expand);
                     redraw();
                 }
@@ -678,11 +704,9 @@ namespace gerber_3d
             case mouse_drag_select: {
                 entities_clicked.clear();
                 highlight_entity = false;
-                vec2d mouse_pos = pos_from_lparam(lParam);
-                drag_mouse_cur_pos = mouse_pos;
-
-                // select all the entities which intersect with the drag rectangle!
-
+                drag_mouse_cur_pos = pos_from_lparam(lParam);
+                drag_rect = { drag_mouse_start_pos, drag_mouse_cur_pos };
+                select_entities(drag_rect);
                 redraw();
             } break;
 
@@ -786,7 +810,6 @@ namespace gerber_3d
 
         bool fill = polarity == polarity_dark || polarity == polarity_positive;
 
-        //        entity_id -= 1;
         if(gdi_entities.empty() || gdi_entities.back().entity_id != entity_id) {
             gdi_entities.emplace_back(entity_id, (int)(gdi_paths.size() - 1llu), 1, fill);
         } else {
@@ -809,17 +832,6 @@ namespace gerber_3d
             case draw_element_line: {
                 p->AddLine((REAL)e.line_start.x, (REAL)e.line_start.y, (REAL)e.line_end.x, (REAL)e.line_end.y);
             } break;
-            }
-
-            gdi_entity &entity = gdi_entities.back();
-
-            if(entity.world_space_bounds.IsEmptyArea()) {
-                p->GetBounds(&entity.world_space_bounds);
-
-            } else {
-                RectF path_bounds;
-                p->GetBounds(&path_bounds);
-                entity.world_space_bounds.Union(entity.world_space_bounds, entity.world_space_bounds, path_bounds);
             }
         }
         p->CloseAllFigures();
@@ -861,6 +873,7 @@ namespace gerber_3d
         select_pen[1]->SetDashPattern(dash, 2);
         select_pen[2]->SetDashStyle(Gdiplus::DashStyleCustom);
         select_pen[2]->SetDashPattern(dash, 2);
+        wireframe_pen = new Pen(wireframe_color, 0);
         fill_brush[0] = new SolidBrush(gerber_fill_color[0]);
         fill_brush[1] = new SolidBrush(gerber_fill_color[1]);
         clear_brush[0] = new SolidBrush(gerber_clear_color[0]);
@@ -907,6 +920,7 @@ namespace gerber_3d
         safe_delete(select_pen[0]);
         safe_delete(select_pen[1]);
         safe_delete(select_pen[2]);
+        safe_delete(wireframe_pen);
         safe_delete(select_fill_brush);
         safe_delete(select_whole_fill_brush);
         safe_delete(info_text_background_brush);
@@ -918,16 +932,29 @@ namespace gerber_3d
 
     void gdi_drawer::draw_entity(gdi_entity const &entity, Brush *brush, Pen *pen)
     {
-        int path_id = entity.path_id;
-        int last_path = entity.num_paths + path_id;
-        for(; path_id != last_path; ++path_id) {
+        for(int path_id = entity.path_id, last_path = path_id + entity.num_paths; path_id != last_path; ++path_id) {
 
             GraphicsPath *path = gdi_paths[path_id];
             if(brush != nullptr) {
                 graphics->FillPath(brush, path);
             }
-            if(pen != nullptr != 0) {
+            if(pen != nullptr) {
                 graphics->DrawPath(pen, path);
+            }
+        }
+    }
+
+    //////////////////////////////////////////////////////////////////////
+
+    void gdi_drawer::draw_selected_entities()
+    {
+        for(auto const &entity : gdi_entities) {
+            if(entity.selected) {
+                Brush *highlight_brush = highlight_clear_brush;
+                if(entity.fill) {
+                    highlight_brush = highlight_fill_brush;
+                }
+                draw_entity(entity, highlight_brush, axes_pen);
             }
         }
     }
@@ -949,20 +976,10 @@ namespace gerber_3d
 
             Pen *pen{ nullptr };
             if((draw_mode & draw_mode_wireframe) != 0) {
-                pen = axes_pen;
+                pen = wireframe_pen;
             }
             draw_entity(entity, brush, pen);
         }
-    }
-
-    //////////////////////////////////////////////////////////////////////
-
-    matrix gdi_drawer::get_transform_matrix() const
-    {
-        if(gerber_file == nullptr) {
-            return matrix::identity();
-        }
-        return world_to_window_transform_matrix(window_rect, view_rect);
     }
 
     //////////////////////////////////////////////////////////////////////
@@ -984,9 +1001,10 @@ namespace gerber_3d
 
         graphics->FillRectangle(clear_brush[0], 0, 0, (INT)window_size.x, (INT)window_size.y);
 
-        matrix mat = get_transform_matrix();
+        world_to_window_matrix = world_to_window_transform_matrix(window_rect, view_rect);
 
-        Matrix gdi_matrix((REAL)mat.A, (REAL)mat.B, (REAL)mat.C, (REAL)mat.D, (REAL)mat.X, (REAL)mat.Y);
+        Matrix gdi_matrix;
+        set_gdi_matrix(world_to_window_matrix, gdi_matrix);
         graphics->SetTransform(&gdi_matrix);
 
         graphics->SetSmoothingMode(Gdiplus::SmoothingModeHighQuality);
@@ -995,7 +1013,7 @@ namespace gerber_3d
 
         draw_all_entities();
 
-        // get screen-space polygons and bounding rect for each path
+        // get screen-space polygons and bounding rect for each path, used in selection/picking etc
 
         for(auto &p : gdi_point_lists) {
             p.clear();
@@ -1006,7 +1024,7 @@ namespace gerber_3d
 
             int path_id = entity.path_id;
             int last_path = entity.num_paths + path_id;
-            entity.pixel_space_bounds = RectF{ 0, 0, 0, 0 };
+            entity.pixel_space_bounds = RectF{};
             for(; path_id != last_path; ++path_id) {
                 std::unique_ptr<GraphicsPath> flattened_path(gdi_paths[path_id]->Clone());
                 flattened_path->Flatten(&gdi_matrix, 2);    // 2 pixel tolerance to reduce the # of points on curves
@@ -1024,17 +1042,7 @@ namespace gerber_3d
             }
         }
 
-        // gerber_file->draw(*this, elements_to_hide);
-
-        // draw just the highlighted net (if there is one)
-        if(highlight_entity) {
-            gdi_entity const &highlighted_entity = gdi_entities[highlight_entity_id];
-            Brush *highlight_brush = highlight_clear_brush;
-            if(highlighted_entity.fill) {
-                highlight_brush = highlight_fill_brush;
-            }
-            draw_entity(highlighted_entity, highlight_brush, axes_pen);
-        }
+        draw_selected_entities();
 
         graphics->SetSmoothingMode(Gdiplus::SmoothingModeNone);
 
@@ -1055,7 +1063,7 @@ namespace gerber_3d
 
         if(show_origin || show_axes) {
 
-            vec2d org = transform_point(mat, { 0, 0 });
+            vec2d org = transform_point(world_to_window_matrix, { 0, 0 });
             float x = (float)org.x;
             float y = (float)org.y;
 
@@ -1086,13 +1094,14 @@ namespace gerber_3d
 
         case mouse_drag_select: {
             int pen_index = 1;
-            if(drag_mouse_start_pos.x > drag_mouse_cur_pos.x) {
+            if(drag_rect.width() < 0) {
                 pen_index = 2;
             }
-            float x = std::min((float)drag_mouse_start_pos.x, (float)drag_mouse_cur_pos.x);
-            float y = std::min((float)drag_mouse_start_pos.y, (float)drag_mouse_cur_pos.y);
-            float w = std::max((float)drag_mouse_start_pos.x, (float)drag_mouse_cur_pos.x) - x;
-            float h = std::max((float)drag_mouse_start_pos.y, (float)drag_mouse_cur_pos.y) - y;
+            rect d = drag_rect.normalize();
+            float x = (float)d.min_pos.x;
+            float y = (float)d.min_pos.y;
+            float w = (float)d.width();
+            float h = (float)d.height();
             graphics->DrawRectangle(select_pen[0], x, y, w, h);
             graphics->DrawRectangle(select_pen[pen_index], x, y, w, h);
         } break;

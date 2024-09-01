@@ -155,6 +155,17 @@ namespace gerber_lib
             }
         }
 
+        //////////////////////////////////////////////////////////////////////
+
+        rect rect::normalize() const
+        {
+            double x1 = std::min((double)min_pos.x, (double)max_pos.x);
+            double y1 = std::min((double)min_pos.y, (double)max_pos.y);
+            double x2 = std::max((double)min_pos.x, (double)max_pos.x);
+            double y2 = std::max((double)min_pos.y, (double)max_pos.y);
+            return { { x1, y1 }, { x2, y2 } };
+        }
+
     }    // namespace gerber_2d
 
 }    // namespace gerber_lib

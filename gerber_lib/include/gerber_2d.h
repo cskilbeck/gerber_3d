@@ -128,6 +128,11 @@ namespace gerber_lib
             }
 
             //////////////////////////////////////////////////////////////////////
+            // this orders min_pos, max_pos correctly
+
+            rect normalize() const;
+
+            //////////////////////////////////////////////////////////////////////
 
             bool contains(vec2d const &p) const
             {
