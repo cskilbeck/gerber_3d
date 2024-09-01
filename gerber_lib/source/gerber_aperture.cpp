@@ -650,7 +650,7 @@ namespace gerber_lib
             return std::format("Rect, {:8.4f}x{:8.4f}{}", parameters[0] / scale, parameters[1] / scale, units);
         } break;
         case aperture_type_oval: {
-            return std::format("Oval, {:8.4f}x{:8.4f}", parameters[0] / scale, parameters[1] / scale, units);
+            return std::format("Oval, {:8.4f}x{:8.4f}{}", parameters[0] / scale, parameters[1] / scale, units);
         } break;
         case aperture_type_polygon: {
             return std::format("Polygon");
@@ -659,7 +659,7 @@ namespace gerber_lib
             return std::format("Macro");
         } break;
         default:
-            return std::format("Nnvalid {} ?", (int)aperture_type);
+            return std::format("Invalid {} ?", (int)aperture_type);
         }
     }
 

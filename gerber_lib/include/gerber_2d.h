@@ -173,6 +173,32 @@ namespace gerber_lib
             {
                 return { min_pos.add(o), max_pos.add(o) };
             }
+
+            //////////////////////////////////////////////////////////////////////
+
+            vec2d mid_point() const
+            {
+                return vec2d{ (min_pos.x + max_pos.x) / 2, (min_pos.y + max_pos.y) / 2 };
+            }
+
+            //////////////////////////////////////////////////////////////////////
+
+            vec2d size() const
+            {
+                return vec2d{ width(), height() };
+            }
+
+            //////////////////////////////////////////////////////////////////////
+
+            double aspect_ratio() const
+            {
+                double w = width();
+                double h = height();
+                if(h != 0) {
+                    return w / h;
+                }
+                return 0;
+            }
         };
 
         //////////////////////////////////////////////////////////////////////
@@ -218,46 +244,6 @@ namespace gerber_lib
             for(auto &p : points) {
                 p = vec2d(p.x, p.y, m);
             }
-        }
-
-        //////////////////////////////////////////////////////////////////////
-
-        inline vec2d mid_point(rect const &r)
-        {
-            return vec2d{ (r.min_pos.x + r.max_pos.x) / 2, (r.min_pos.y + r.max_pos.y) / 2 };
-        }
-
-        //////////////////////////////////////////////////////////////////////
-
-        inline double width(rect const &r)
-        {
-            return r.max_pos.x - r.min_pos.x;
-        }
-
-        //////////////////////////////////////////////////////////////////////
-
-        inline double height(rect const &r)
-        {
-            return r.max_pos.y - r.min_pos.y;
-        }
-
-        //////////////////////////////////////////////////////////////////////
-
-        inline vec2d size(rect const &r)
-        {
-            return vec2d{ width(r), height(r) };
-        }
-
-        //////////////////////////////////////////////////////////////////////
-
-        inline double aspect_ratio(rect const &r)
-        {
-            double w = width(r);
-            double h = height(r);
-            if(h != 0) {
-                return w / h;
-            }
-            return 0;
         }
 
         //////////////////////////////////////////////////////////////////////

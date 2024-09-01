@@ -77,6 +77,7 @@ namespace gerber_3d
             mouse_drag_pan,
             mouse_drag_zoom,
             mouse_drag_zoom_select,
+            mouse_drag_maybe_select,
             mouse_drag_select
         };
 
@@ -185,7 +186,7 @@ namespace gerber_3d
 
         gerber_3d::occ_drawer occ;
 
-        void on_left_click(vec2d const &mouse_pos);
+        void on_left_click(vec2d const &mouse_pos, bool shift);
 
         void draw_all_entities();
         void draw_selected_entities();
@@ -202,7 +203,7 @@ namespace gerber_3d
 
         std::string get_open_filename();
 
-        void select_entities(rect const &r);
+        void select_entities(rect const &r, bool toggle);
 
         LRESULT wnd_proc(UINT message, WPARAM wParam, LPARAM lParam);
         static LRESULT CALLBACK wnd_proc_proxy(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam);

@@ -37,6 +37,8 @@ namespace
 
     Color const debug_color{ 255, 0, 0, 0 };
 
+    double const drag_offset_start_distance = 16;
+
     //////////////////////////////////////////////////////////////////////
 
     void set_gdi_matrix(matrix const &s, Matrix &d)
@@ -160,17 +162,17 @@ namespace
 
     rect correct_aspect_ratio(double new_aspect_ratio, rect const &r, aspect_ratio_correction correction)
     {
-        bool dir = aspect_ratio(r) > new_aspect_ratio;
+        bool dir = r.aspect_ratio() > new_aspect_ratio;
         if(correction == aspect_expand) {
             dir = !dir;
         }
-        vec2d n = size(r).scale(0.5);
+        vec2d n = r.size().scale(0.5);
         if(dir) {
             n.x = n.y * new_aspect_ratio;
         } else {
             n.y = n.x / new_aspect_ratio;
         }
-        vec2d center = mid_point(r);
+        vec2d center = r.mid_point();
         return rect{ center.subtract(n), center.add(n) };
     }
 
@@ -183,7 +185,7 @@ namespace
         matrix origin = matrix::translate(view.min_pos.negate());
         matrix scale = matrix::scale({ window.width() / view.width(), window.height() / view.height() });
         matrix flip = matrix::scale({ 1, -1 });
-        matrix offset = matrix::translate({ 0, height(window) });
+        matrix offset = matrix::translate({ 0, window.height() });
 
         matrix m = matrix::identity();
         m = matrix::multiply(m, origin);
@@ -216,9 +218,9 @@ namespace gerber_3d
 
     void gdi_drawer::zoom_to_rect(rect const &zoom_rect, double border_ratio)
     {
-        rect new_rect = correct_aspect_ratio(aspect_ratio(window_rect), zoom_rect, aspect_expand);
-        vec2d mid = mid_point(new_rect);
-        vec2d siz = size(new_rect).scale(border_ratio / 2);
+        rect new_rect = correct_aspect_ratio(window_rect.aspect_ratio(), zoom_rect, aspect_expand);
+        vec2d mid = new_rect.mid_point();
+        vec2d siz = new_rect.size().scale(border_ratio / 2);
         view_rect = { mid.subtract(siz), mid.add(siz) };
     }
 
@@ -341,7 +343,7 @@ namespace gerber_3d
         vec2d new_size{ view_rect.width() / zoom_scale, view_rect.height() / zoom_scale };
 
         // world position of pos
-        vec2d p = view_rect.min_pos.add(zoom_pos.multiply(size(view_rect)));
+        vec2d p = view_rect.min_pos.add(zoom_pos.multiply(view_rect.size()));
 
         // new rectangle offset from world position
         vec2d bottom_left = p.subtract(new_size.multiply(zoom_pos));
@@ -352,7 +354,7 @@ namespace gerber_3d
 
     //////////////////////////////////////////////////////////////////////
 
-    void gdi_drawer::select_entities(rect const &r)
+    void gdi_drawer::select_entities(rect const &r, bool toggle)
     {
         rect p = r.normalize();
         RectF selection_rect{ (float)p.min_pos.x, (float)p.min_pos.y, (float)p.width(), (float)p.height() };
@@ -360,8 +362,13 @@ namespace gerber_3d
             int path_id = entity.path_id;
             for(int n = 0; n < entity.num_paths; ++n) {
                 std::vector<PointF> const &gdi_points = gdi_point_lists[path_id];
-                entity.selected =
+                bool selected =
                     selection_rect.Contains(entity.pixel_space_bounds) || rect_intersects_with_polygon(gdi_points.data(), gdi_points.size(), selection_rect);
+                if(toggle) {
+                    entity.selected = selected;
+                } else {
+                    entity.selected |= selected;
+                }
                 path_id += 1;
             }
         }
@@ -369,7 +376,7 @@ namespace gerber_3d
 
     //////////////////////////////////////////////////////////////////////
 
-    void gdi_drawer::on_left_click(vec2d const &mouse_pos)
+    void gdi_drawer::on_left_click(vec2d const &mouse_pos, bool shift)
     {
         LOG_CONTEXT("pick", info);
 
@@ -425,13 +432,17 @@ namespace gerber_3d
                 selected_entity_index = std::min(selected_entity_index - 1, entities_clicked.size() - 1);
             }
             gdi_entity &e = gdi_entities[entities_clicked[selected_entity_index]];
-            e.selected = !e.selected;
+            if(shift) {
+                e.selected = true;
+            } else {
+                e.selected = !e.selected;
+            }
             if(e.selected) {
                 highlight_entity_id = entities_clicked[selected_entity_index];
             } else {
                 highlight_entity = false;
             }
-        } else {
+        } else if(!shift) {
             for(auto &e : gdi_entities) {
                 e.selected = false;
             }
@@ -511,7 +522,6 @@ namespace gerber_3d
                             }
                         }
                     }
-                    LOG_INFO("{},{} {}x{}", r.X, r.Y, r.Width, r.Height);
                     if(!r.IsEmptyArea()) {
                         vec2d s{ r.X, r.Y + r.Height };
                         vec2d t{ r.X + r.Width, r.Y };
@@ -563,7 +573,7 @@ namespace gerber_3d
             case 'L': {
                 std::string filename = get_open_filename();
                 if(!filename.empty()) {
-                    LOG_INFO("{}", filename);
+                    LOG_INFO("Loading file {}", filename);
                     load_gerber_file(filename);
                 }
             } break;
@@ -571,7 +581,7 @@ namespace gerber_3d
             case 'R': {
                 std::string filename = current_filename();
                 if(!filename.empty()) {
-                    LOG_INFO("RELOADING {}", filename);
+                    LOG_INFO("Reloading {}", filename);
                     load_gerber_file(filename);
                 }
             } break;
@@ -626,8 +636,7 @@ namespace gerber_3d
             vec2d scale_factor = new_window_size.divide(window_size);
             window_size = new_window_size;
             window_rect = { { 0, 0 }, window_size };
-            vec2d old_view_size = size(view_rect);
-            vec2d new_view_size = old_view_size.multiply(scale_factor);
+            vec2d new_view_size = view_rect.size().multiply(scale_factor);
             view_rect.max_pos = view_rect.min_pos.add(new_view_size);
             redraw();
         } break;
@@ -650,9 +659,9 @@ namespace gerber_3d
                 drag_mouse_start_pos = mouse_pos;
                 drag_rect = {};
                 SetCapture(hwnd);
-            } else if((GetKeyState(VK_SHIFT) & 0x8000) == 0) {
-                on_left_click(mouse_pos);
-                mouse_drag = mouse_drag_select;
+            } else {
+                on_left_click(mouse_pos, (GetKeyState(VK_SHIFT) & 0x8000) != 0);
+                mouse_drag = mouse_drag_maybe_select;
                 drag_rect = {};
                 drag_mouse_start_pos = mouse_pos;
                 SetCapture(hwnd);
@@ -662,11 +671,13 @@ namespace gerber_3d
             //////////////////////////////////////////////////////////////////////
 
         case WM_LBUTTONUP: {
-
             if(mouse_drag == mouse_drag_zoom_select) {
                 vec2d mn = drag_rect.min_pos;
                 vec2d mx = drag_rect.max_pos;
-                view_rect = { world_pos_from_window_pos(vec2d{ mn.x, mx.y }), world_pos_from_window_pos(vec2d{ mx.x, mn.y }) };
+                rect d = rect{ mn, mx }.normalize();
+                if(d.width() > 1 && d.height() > 1) {
+                    view_rect = { world_pos_from_window_pos(vec2d{ mn.x, mx.y }), world_pos_from_window_pos(vec2d{ mx.x, mn.y }) };
+                }
             }
             mouse_drag = mouse_drag_none;
             redraw();
@@ -735,21 +746,33 @@ namespace gerber_3d
                 if(drag_mouse_cur_pos.x != drag_mouse_start_pos.x && drag_mouse_cur_pos.y != drag_mouse_start_pos.y) {
 
                     drag_rect_raw = rect{ drag_mouse_start_pos, drag_mouse_cur_pos }.normalize();
-                    drag_rect = correct_aspect_ratio(aspect_ratio(window_rect), drag_rect_raw, aspect_expand);
+                    drag_rect = correct_aspect_ratio(window_rect.aspect_ratio(), drag_rect_raw, aspect_expand);
+                    redraw();
+                }
+            } break;
+
+            case mouse_drag_maybe_select: {
+                vec2d pos = pos_from_lparam(lParam);
+                if(pos.subtract(drag_mouse_start_pos).length() > drag_offset_start_distance) {
+                    mouse_drag = mouse_drag_select;
+                    entities_clicked.clear();
+                    highlight_entity = false;
+                    drag_mouse_cur_pos = pos;
+                    drag_rect = rect{ drag_mouse_start_pos, drag_mouse_cur_pos };
+                    select_entities(drag_rect, (GetKeyState(VK_SHIFT) & 0x8000) == 0);
                     redraw();
                 }
             } break;
 
             case mouse_drag_select: {
-                entities_clicked.clear();
-                highlight_entity = false;
                 drag_mouse_cur_pos = pos_from_lparam(lParam);
                 drag_rect = rect{ drag_mouse_start_pos, drag_mouse_cur_pos };
-                select_entities(drag_rect);
+                select_entities(drag_rect, (GetKeyState(VK_SHIFT) & 0x8000) == 0);
                 redraw();
             } break;
 
             case mouse_drag_none: {
+                // update mouse world coordinates in a status bar or something here...
             } break;
 
             default:
@@ -1087,8 +1110,8 @@ namespace gerber_3d
 
         if(show_extent) {
             rect const &gerber_rect = gerber_file->image.info.extent;
-            double gerber_width = width(gerber_rect);
-            double gerber_height = height(gerber_rect);
+            double gerber_width = gerber_rect.width();
+            double gerber_height = gerber_rect.height();
 
             // transform is still active so extent is just the gerber rect
             REAL x = (REAL)gerber_rect.min_pos.x;
@@ -1122,13 +1145,13 @@ namespace gerber_3d
 
         case mouse_drag_zoom_select: {
 
-            graphics->FillRectangle(select_fill_brush, (INT)drag_rect_raw.min_pos.x, (INT)drag_rect_raw.min_pos.y, (INT)width(drag_rect_raw) + 1,
-                                    (INT)height(drag_rect_raw) + 1);
+            graphics->FillRectangle(select_fill_brush, (INT)drag_rect_raw.min_pos.x, (INT)drag_rect_raw.min_pos.y, (INT)drag_rect_raw.width() + 1,
+                                    (INT)drag_rect_raw.height() + 1);
 
-            graphics->DrawRectangle(select_outline_pen, (INT)drag_rect.min_pos.x, (INT)drag_rect.min_pos.y, (INT)width(drag_rect), (INT)height(drag_rect));
+            graphics->DrawRectangle(select_outline_pen, (INT)drag_rect.min_pos.x, (INT)drag_rect.min_pos.y, (INT)drag_rect.width(), (INT)drag_rect.height());
 
-            graphics->FillRectangle(select_whole_fill_brush, (INT)drag_rect.min_pos.x + 1, (INT)drag_rect.min_pos.y + 1, (INT)width(drag_rect) - 1,
-                                    (INT)height(drag_rect) - 1);
+            graphics->FillRectangle(select_whole_fill_brush, (INT)drag_rect.min_pos.x + 1, (INT)drag_rect.min_pos.y + 1, (INT)drag_rect.width() - 1,
+                                    (INT)drag_rect.height() - 1);
         } break;
 
         case mouse_drag_select: {

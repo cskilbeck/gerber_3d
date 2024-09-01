@@ -1300,7 +1300,7 @@ namespace gerber_lib
         std::string attribute_name = tokens[0];
         std::string attribute_value = join(std::span(tokens.data() + 1, tokens.size() - 1), ",");
 
-        LOG_INFO("Attribute:{}={}", attribute_name, attribute_value);
+        LOG_VERBOSE("Attribute:{}={}", attribute_name, attribute_value);
         return ok;
     }
 
@@ -2047,8 +2047,6 @@ namespace gerber_lib
 
                                 rect arc_extent{};
                                 gerber_2d::get_arc_extents(arc.pos, arc.size.x / 2, arc.start_angle, arc.end_angle, arc_extent);
-
-                                // LOG_INFO("{}:{}", net->circle_segment, arc_extent);
 
                                 vec2d ha{ ap_size.x / 2, ap_size.y / 2 };
                                 arc_extent.min_pos = arc_extent.min_pos.subtract(ha);
