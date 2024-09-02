@@ -60,18 +60,21 @@ namespace
     {
         bool inside = false;
 
-        for(size_t i = 0, j = num_polygon_points - 1; i < num_polygon_points; j = i++) {
+        if(num_polygon_points != 0) {
 
-            PointF const &a = polygon_points[i];
-            PointF const &b = polygon_points[j];
+            for(size_t i = 0, j = num_polygon_points - 1; i < num_polygon_points; j = i++) {
 
-            // if the line straddles the point in the vertical direction
-            if((a.Y > p.Y) != (b.Y > p.Y)) {
+                PointF const &a = polygon_points[i];
+                PointF const &b = polygon_points[j];
 
-                // check if a horizontal line from the point crosses the line
-                if((p.X < (b.X - a.X) * (p.Y - a.Y) / (b.Y - a.Y) + a.X)) {
+                // if the line straddles the point in the vertical direction
+                if((a.Y > p.Y) != (b.Y > p.Y)) {
 
-                    inside = !inside;
+                    // check if a horizontal line from the point crosses the line
+                    if((p.X < (b.X - a.X) * (p.Y - a.Y) / (b.Y - a.Y) + a.X)) {
+
+                        inside = !inside;
+                    }
                 }
             }
         }
@@ -121,6 +124,9 @@ namespace
 
     bool rect_intersects_with_polygon(PointF const *polygon_points, size_t num_polygon_points, RectF const &r)
     {
+        if(num_polygon_points == 0) {
+            return false;
+        }
         PointF bl{ r.X, r.Y };
         PointF br{ r.X + r.Width, r.Y };
         PointF tl{ r.X, r.Y + r.Height };
@@ -222,6 +228,7 @@ namespace gerber_3d
         vec2d mid = new_rect.mid_point();
         vec2d siz = new_rect.size().scale(border_ratio / 2);
         view_rect = { mid.subtract(siz), mid.add(siz) };
+        redraw();
     }
 
     //////////////////////////////////////////////////////////////////////
@@ -362,8 +369,8 @@ namespace gerber_3d
             int path_id = entity.path_id;
             for(int n = 0; n < entity.num_paths; ++n) {
                 std::vector<PointF> const &gdi_points = gdi_point_lists[path_id];
-                bool selected =
-                    selection_rect.Contains(entity.pixel_space_bounds) || rect_intersects_with_polygon(gdi_points.data(), gdi_points.size(), selection_rect);
+                bool selected = selection_rect.Contains(entity.pixel_space_bounds) ||
+                                rect_intersects_with_polygon(gdi_points.data(), gdi_points.size(), selection_rect);
                 if(toggle) {
                     entity.selected = selected;
                 } else {
@@ -372,6 +379,7 @@ namespace gerber_3d
                 path_id += 1;
             }
         }
+        redraw();
     }
 
     //////////////////////////////////////////////////////////////////////
@@ -532,7 +540,6 @@ namespace gerber_3d
                     } else {
                         zoom_to_rect(gerber_file->image.info.extent);
                     }
-                    redraw();
                 }
                 break;
 
@@ -742,9 +749,7 @@ namespace gerber_3d
 
             case mouse_drag_zoom_select: {
                 drag_mouse_cur_pos = pos_from_lparam(lParam);
-
-                if(drag_mouse_cur_pos.x != drag_mouse_start_pos.x && drag_mouse_cur_pos.y != drag_mouse_start_pos.y) {
-
+                if(drag_mouse_cur_pos.subtract(drag_mouse_start_pos).length() > 4) {
                     drag_rect_raw = rect{ drag_mouse_start_pos, drag_mouse_cur_pos }.normalize();
                     drag_rect = correct_aspect_ratio(window_rect.aspect_ratio(), drag_rect_raw, aspect_expand);
                     redraw();
@@ -760,7 +765,6 @@ namespace gerber_3d
                     drag_mouse_cur_pos = pos;
                     drag_rect = rect{ drag_mouse_start_pos, drag_mouse_cur_pos };
                     select_entities(drag_rect, (GetKeyState(VK_SHIFT) & 0x8000) == 0);
-                    redraw();
                 }
             } break;
 
@@ -768,7 +772,6 @@ namespace gerber_3d
                 drag_mouse_cur_pos = pos_from_lparam(lParam);
                 drag_rect = rect{ drag_mouse_start_pos, drag_mouse_cur_pos };
                 select_entities(drag_rect, (GetKeyState(VK_SHIFT) & 0x8000) == 0);
-                redraw();
             } break;
 
             case mouse_drag_none: {
@@ -1266,26 +1269,6 @@ namespace gerber_3d
 
             graphics->DrawString(wide_text.c_str(), (INT)text.size(), info_text_font, origin, info_text_foregound_brush);
         }
-
-#if 0
-        {
-            static PointF p[2];
-            static int id = 0;
-            POINT m;
-            GetCursorPos(&m);
-            ScreenToClient(hwnd, &m);
-            p[id] = { (REAL)m.x, (REAL)m.y };
-            id = 1 - id;
-            Pen *pen = origin_pen;
-            PointF pos{ 200, 200 };
-            float len = -100;
-            graphics->DrawLine(axes_pen, pos, { pos.X + len, pos.Y });
-            if(horizontal_line_intersects(pos, len, p[0], p[1])) {
-                pen = extent_pen;
-            }
-            graphics->DrawLine(pen, p[0], p[1]);
-        }
-#endif
 
         Graphics *window_graphics = Gdiplus::Graphics::FromHDC(hdc);
         window_graphics->DrawImage(bitmap, 0, 0);
