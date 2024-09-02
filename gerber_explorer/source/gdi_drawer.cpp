@@ -815,6 +815,7 @@ namespace gerber_3d
 
     void gdi_drawer::save_settings() const
     {
+        save_int("units", (int)units);
         save_bool("show_axes", show_axes);
         save_bool("show_extent", show_extent);
         save_bool("show_origin", show_origin);
@@ -825,6 +826,7 @@ namespace gerber_3d
 
     void gdi_drawer::load_settings()
     {
+        load_int("units", (int &)units);
         load_bool("show_axes", show_axes);
         load_bool("show_extent", show_extent);
         load_bool("show_origin", show_origin);

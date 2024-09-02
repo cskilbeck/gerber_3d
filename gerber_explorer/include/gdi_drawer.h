@@ -55,7 +55,7 @@ namespace gerber_3d
         HWND hwnd{};
         HWND status_hwnd{};
 
-        enum display_units
+        enum display_units : int
         {
             display_units_millimeters,
             display_units_inches
