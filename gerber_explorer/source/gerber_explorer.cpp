@@ -8,8 +8,9 @@
 #include "gerber_lib.h"
 #include "gerber_util.h"
 #include "gerber_settings.h"
-#include "gdi_drawer.h"
-#include "occ_drawer.h"
+//#include "gdi_drawer.h"
+//#include "occ_drawer.h"
+#include "gl_drawer.h"
 
 //////////////////////////////////////////////////////////////////////
 
@@ -30,9 +31,12 @@ int main(int argc, char **argv)
         gerber_util::load_string("filename", filename);
     }
 
-    gerber_3d::gdi_drawer gdi;
-    gdi.create_window(850, 100, 700, 700);
-    gdi.load_gerber_file(filename);
+    //gerber_3d::gdi_drawer gdi;
+    //gdi.create_window(850, 100, 700, 700);
+    //gdi.load_gerber_file(filename);
+
+    gerber_3d::gl_drawer gl;
+    gl.create_window(100, 100, 700, 700);
 
     while(true) {
 
@@ -44,11 +48,12 @@ int main(int argc, char **argv)
 
                 if(msg.message == WM_QUIT) {
 
-                    gdi.cleanup();
+                    // gdi.cleanup();
+                    gl.cleanup();
 
-                    if(!gerber_util::save_string("filename", std::filesystem::absolute(gdi.current_filename()).string())) {
-                        LOG_ERROR("Huh?");
-                    }
+                    //if(!gerber_util::save_string("filename", std::filesystem::absolute(gdi.current_filename()).string())) {
+                    //    LOG_ERROR("Huh?");
+                    //}
                     return 0;
                 }
                 TranslateMessage(&msg);

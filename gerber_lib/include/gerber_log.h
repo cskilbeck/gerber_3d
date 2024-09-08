@@ -69,7 +69,7 @@ namespace gerber_lib
 //////////////////////////////////////////////////////////////////////
 
 #define LOG_CONTEXT(context, max_level)                              \
-    static ::gerber_lib::gerber_log_context __log_context            \
+    static constexpr ::gerber_lib::gerber_log_context __log_context  \
     {                                                                \
         context, gerber_lib::gerber_log_level::log_level_##max_level \
     }
