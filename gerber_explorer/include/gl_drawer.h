@@ -85,6 +85,8 @@ namespace gerber_3d
         LRESULT CALLBACK wnd_proc(UINT message, WPARAM wParam, LPARAM lParam);
         static LRESULT CALLBACK wnd_proc_proxy(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam);
 
+        void draw();
+
         void cleanup()
         {
         }

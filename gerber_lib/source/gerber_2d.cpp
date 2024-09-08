@@ -93,6 +93,25 @@ namespace gerber_lib
         }
 
         //////////////////////////////////////////////////////////////////////
+        // make a matrix which maps window rect to world coordinates
+        // if aspect ratio(view_rect) != aspect_ratio(window_rect), there will be distortion
+
+        matrix matrix::world_to_window_transform(rect const &window, rect const &view)
+        {
+            matrix origin = matrix::translate(view.min_pos.negate());
+            matrix scale = matrix::scale({ window.width() / view.width(), window.height() / view.height() });
+            matrix flip = matrix::scale({ 1, -1 });
+            matrix offset = matrix::translate({ 0, window.height() });
+
+            matrix m = matrix::identity();
+            m = matrix::multiply(m, origin);
+            m = matrix::multiply(m, scale);
+            m = matrix::multiply(m, flip);
+            m = matrix::multiply(m, offset);
+            return m;
+        }
+
+        //////////////////////////////////////////////////////////////////////
 
         vec2d transform_point(matrix const &m, vec2d const &p)
         {

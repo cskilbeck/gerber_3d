@@ -16,6 +16,10 @@
 #include "gl_functions.h"
 #include "polypartition.h"
 
+#include "imgui.h"
+#include "imgui_impl_opengl3.h"
+#include "imgui_impl_win32.h"
+
 #pragma comment(lib, "opengl32.lib")
 
 namespace
@@ -224,6 +228,12 @@ namespace gerber_3d
 
     LRESULT CALLBACK gl_drawer::wnd_proc_proxy(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
     {
+        extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
+
+        if(ImGui_ImplWin32_WndProcHandler(hWnd, message, wParam, lParam)) {
+            return true;
+        }
+
         if(message == WM_CREATE) {
             LPCREATESTRUCTA c = reinterpret_cast<LPCREATESTRUCTA>(lParam);
             SetWindowLongPtrA(hWnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(c->lpCreateParams));
@@ -243,15 +253,16 @@ namespace gerber_3d
 
         switch(message) {
 
+        case WM_SIZING: {
+            draw();
+            ValidateRect(hwnd, nullptr);
+        } break;
+
         case WM_SIZE: {
-            // draw();
-            // swap();
+            ValidateRect(hwnd, nullptr);
         } break;
 
         case WM_LBUTTONDOWN: {
-            // int x = GET_X_LPARAM(lParam);
-            // int y = GET_Y_LPARAM(lParam);
-            // on_left_click(x, y);
         } break;
 
         case WM_KEYDOWN:
@@ -263,13 +274,11 @@ namespace gerber_3d
             } break;
 
             default:
-                // on_key_press((int)wParam);
                 break;
             }
             break;
 
         case WM_CLOSE:
-            // free_gl_resources();
             DestroyWindow(hwnd);
             break;
 
@@ -285,27 +294,6 @@ namespace gerber_3d
             break;
 
         case WM_PAINT: {
-            RECT rc;
-            GetClientRect(hwnd, &rc);
-            window_width = rc.right;
-            window_height = rc.bottom;
-            glViewport(0, 0, window_width, window_height);
-            gl_matrix projection_matrix;
-            make_ortho(projection_matrix, window_width, window_height);
-            glUniformMatrix4fv(program.projection_location, 1, true, projection_matrix);
-            glClearColor(0.1f, 0.2f, 0.5f, 0);
-            glClear(GL_COLOR_BUFFER_BIT);
-
-            vert *v = (vert *)glMapBuffer(GL_ARRAY_BUFFER, GL_WRITE_ONLY);
-            GLushort *i = (GLushort *)glMapBuffer(GL_ELEMENT_ARRAY_BUFFER, GL_WRITE_ONLY);
-            memcpy(v, test_vertices.data(), test_vertices.size() * sizeof(vert));
-            memcpy(i, test_indices.data(), test_indices.size() * sizeof(GLushort));
-            glUnmapBuffer(GL_ELEMENT_ARRAY_BUFFER);
-            glUnmapBuffer(GL_ARRAY_BUFFER);
-            glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-            glDrawElements(GL_TRIANGLES, (GLsizei)test_indices.size(), GL_UNSIGNED_SHORT, (GLvoid *)0);
-
-            SwapBuffers(window_dc);
             ValidateRect(hwnd, nullptr);
         } break;
 
@@ -464,21 +452,30 @@ namespace gerber_3d
             return -12;
         }
 
-        // activate the true render context
-
-        wglMakeCurrent(temp_dc, NULL);
-
         // destroy temp context and window
 
+        wglMakeCurrent(temp_dc, NULL);
         wglDeleteContext(temp_render_context);
         ReleaseDC(temp_hwnd, temp_dc);
         DestroyWindow(temp_hwnd);
 
-        // done
+        // activate the true render context
 
         wglMakeCurrent(window_dc, render_context);
-
         wglSwapIntervalEXT(1);
+
+        // init ImGui
+
+        IMGUI_CHECKVERSION();
+        ImGui::CreateContext();
+        ImGuiIO &io = ImGui::GetIO();
+        io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;    // Enable Keyboard Controls
+        io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;     // Enable Gamepad Controls
+
+        ImGui::StyleColorsDark();
+
+        ImGui_ImplWin32_InitForOpenGL(hwnd);
+        ImGui_ImplOpenGL3_Init();
 
         // setup shader and vertex array
 
@@ -509,5 +506,48 @@ namespace gerber_3d
     {
     }
 
+    void gl_drawer::draw()
+    {
+        static int counter = 0;
+
+        ImGui_ImplOpenGL3_NewFrame();
+        ImGui_ImplWin32_NewFrame();
+        ImGui::NewFrame();
+        ImGui::Begin("Hello, world!");
+        ImGui::Text("This is some useful text.");
+        if(ImGui::Button("Button")) {
+            counter++;
+        }
+        ImGui::SameLine();
+        ImGui::Text("counter = %d", counter);
+        ImGuiIO &io = ImGui::GetIO();
+        ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / io.Framerate, io.Framerate);
+        ImGui::End();
+        ImGui::Render();
+
+        RECT rc;
+        GetClientRect(hwnd, &rc);
+        window_width = rc.right;
+        window_height = rc.bottom;
+        glViewport(0, 0, window_width, window_height);
+        gl_matrix projection_matrix;
+        make_ortho(projection_matrix, window_width, window_height);
+        glUniformMatrix4fv(program.projection_location, 1, true, projection_matrix);
+        glClearColor(0.1f, 0.2f, 0.5f, 0);
+        glClear(GL_COLOR_BUFFER_BIT);
+
+        vert *v = (vert *)glMapBuffer(GL_ARRAY_BUFFER, GL_WRITE_ONLY);
+        GLushort *i = (GLushort *)glMapBuffer(GL_ELEMENT_ARRAY_BUFFER, GL_WRITE_ONLY);
+        memcpy(v, test_vertices.data(), test_vertices.size() * sizeof(vert));
+        memcpy(i, test_indices.data(), test_indices.size() * sizeof(GLushort));
+        glUnmapBuffer(GL_ELEMENT_ARRAY_BUFFER);
+        glUnmapBuffer(GL_ARRAY_BUFFER);
+        glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+        glDrawElements(GL_TRIANGLES, (GLsizei)test_indices.size(), GL_UNSIGNED_SHORT, (GLvoid *)0);
+
+        ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+
+        SwapBuffers(window_dc);
+    }
 
 }    // namespace gerber_3d

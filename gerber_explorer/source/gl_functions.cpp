@@ -13,15 +13,29 @@
 
 namespace
 {
+    typedef PROC(__stdcall *GL3WglGetProcAddr)(LPCSTR);
+    static GL3WglGetProcAddr wgl_get_proc_address{ nullptr };
 
-template <typename T> void get_proc(char const *function_name, T &function_pointer)
-{
-    function_pointer = reinterpret_cast<T>(wglGetProcAddress(function_name));
-    if(function_pointer == nullptr) {
-        fprintf(stderr, "ERROR: Can't get proc address for %s\n", function_name);
-        ExitProcess(1);
+    template <typename T> void get_proc(char const *function_name, T &function_pointer)
+    {
+        if(wgl_get_proc_address == nullptr) {
+            HMODULE gl_dll = LoadLibraryA("opengl32.dll");
+            if(gl_dll == nullptr) {
+                fprintf(stderr, "ERROR: Can't load OpenGL32.dll\n");
+                ExitProcess(0);
+            }
+            wgl_get_proc_address = (GL3WglGetProcAddr)GetProcAddress(gl_dll, "wglGetProcAddress");
+            if(wgl_get_proc_address == nullptr) {
+                fprintf(stderr, "ERROR: Can't get proc address for wglGetProcAddress\n");
+                ExitProcess(0);
+            }
+        }
+        function_pointer = reinterpret_cast<T>(wgl_get_proc_address(function_name));
+        if(function_pointer == nullptr) {
+            fprintf(stderr, "ERROR: Can't get proc address for %s\n", function_name);
+            ExitProcess(1);
+        }
     }
-}
 
 }    // namespace
 

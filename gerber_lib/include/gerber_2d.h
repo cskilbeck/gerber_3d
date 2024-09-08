@@ -233,6 +233,7 @@ namespace gerber_lib
             static matrix scale(vec2d const &scale);
             static matrix rotate_around(double angle_degrees, vec2d const &pos);
             static matrix invert(matrix const &m);
+            static matrix world_to_window_transform(rect const &window, rect const &view);
         };
 
         vec2d transform_point(matrix const &m, vec2d const &p);

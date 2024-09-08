@@ -31,35 +31,32 @@ int main(int argc, char **argv)
         gerber_util::load_string("filename", filename);
     }
 
-    //gerber_3d::gdi_drawer gdi;
-    //gdi.create_window(850, 100, 700, 700);
-    //gdi.load_gerber_file(filename);
+    // gerber_3d::gdi_drawer gdi;
+    // gdi.create_window(850, 100, 700, 700);
+    // gdi.load_gerber_file(filename);
 
     gerber_3d::gl_drawer gl;
     gl.create_window(100, 100, 700, 700);
 
-    while(true) {
-
-        switch(MsgWaitForMultipleObjects(0, nullptr, false, 12, QS_ALLEVENTS)) {
-
-        case WAIT_OBJECT_0: {
-            MSG msg;
-            while(PeekMessageA(&msg, NULL, 0, 0, PM_REMOVE)) {
-
-                if(msg.message == WM_QUIT) {
-
-                    // gdi.cleanup();
-                    gl.cleanup();
-
-                    //if(!gerber_util::save_string("filename", std::filesystem::absolute(gdi.current_filename()).string())) {
-                    //    LOG_ERROR("Huh?");
-                    //}
-                    return 0;
-                }
-                TranslateMessage(&msg);
-                DispatchMessageA(&msg);
+    bool done = false;
+    while(!done) {
+        // Poll and handle messages (inputs, window resize, etc.)
+        // See the WndProc() function below for our to dispatch events to the Win32 backend.
+        MSG msg;
+        while(::PeekMessage(&msg, nullptr, 0U, 0U, PM_REMOVE)) {
+            ::TranslateMessage(&msg);
+            ::DispatchMessageA(&msg);
+            if(msg.message == WM_QUIT) {
+                done = true;
             }
-        } break;
         }
+        if(done) {
+            break;
+        }
+        if(::IsIconic(gl.hwnd) || !IsWindowVisible(gl.hwnd)) {
+            ::Sleep(10);
+            continue;
+        }
+        gl.draw();
     }
 }
