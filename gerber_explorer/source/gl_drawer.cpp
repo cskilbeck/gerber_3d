@@ -1,565 +1,205 @@
-#include "gerber_log.h"
-#include "gerber_lib.h"
+//////////////////////////////////////////////////////////////////////
 
-#include "gl_drawer.h"
+#include <vector>
 
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 
 #include <windows.h>
 #include <windowsx.h>
+
 #include <gl/GL.h>
 
 #include "Wglext.h"
 #include "glcorearb.h"
 
+#include "gl_window.h"
 #include "gl_functions.h"
 #include "polypartition.h"
 
-#include "imgui.h"
-#include "imgui_impl_opengl3.h"
-#include "imgui_impl_win32.h"
+#include "gl_drawer.h"
+#include "gerber_lib.h"
+#include "gerber_log.h"
 
-#pragma comment(lib, "opengl32.lib")
+#include "polypartition.h"
+
+LOG_CONTEXT("gl_drawer", debug);
 
 namespace
 {
-    using vec2d = gerber_lib::gerber_2d::vec2d;
-    using gl_matrix = float[16];
+    using namespace gerber_lib;
 
-    struct vert
-    {
-        float x, y;
-    };
-
-    std::vector<vert> test_vertices{ { 10, 10 }, { 100, 30 }, { 80, 70 }, { 20, 60 } };
-    std::vector<GLushort> test_indices{ 0, 1, 2, 0, 2, 3 };
-
-    char const *vertex_shader_source = R"-----(
-
-        #version 400
-        in vec2 positionIn;
-        out vec4 fragmentColor;
-
-        uniform mat4 projection;
-        uniform vec4 color;
-
-        void main() {
-            gl_Position = projection * vec4(positionIn, 0.0f, 1.0f);
-            fragmentColor = color;
-        
-        })-----";
-
-    //////////////////////////////////////////////////////////////////////
-
-    char const *fragment_shader_source = R"-----(
-
-        #version 400
-        in vec4 fragmentColor;
-        out vec4 color;
-
-        void main() {
-            color = fragmentColor;
-
-        })-----";
-
-    void make_ortho(gl_matrix mat, int w, int h)
-    {
-        mat[0] = 2.0f / w;
-        mat[1] = 0.0f;
-        mat[2] = 0.0f;
-        mat[3] = -1.0f;
-        mat[4] = 0.0f;
-        mat[5] = 2.0f / h;
-        mat[6] = 0.0f;
-        mat[7] = -1.0f;
-        mat[8] = 0.0f;
-        mat[9] = 0.0f;
-        mat[10] = -1.0f;
-        mat[11] = 0.0f;
-        mat[12] = 0.0f;
-        mat[13] = 0.0f;
-        mat[14] = 0.0f;
-        mat[15] = 1.0f;
-    }
-
-    bool is_clockwise(std::vector<vec2d> const &points)
+    bool is_clockwise(std::vector<TPPLPoint> const &points)
     {
         double t = 0;
-        for(size_t i = 0, j = points.size() - 1; i < points.size(); j = i++) {
-            t += points[i].x * points[j].y - points[i].y * points[j].x;
+        for(size_t i = 0, n = points.size() - 1; i < points.size(); n = i++) {
+            t += (points[i].x - points[n].x) * (points[i].y + points[n].y);
         }
         return t >= 0;
     }
-
-};    // namespace
+}    // namespace
 
 namespace gerber_3d
 {
     //////////////////////////////////////////////////////////////////////
 
-    int gl_program::check_shader(GLuint shader_id) const
+    void gl_drawer::set_gerber(gerber *g)
     {
-        GLint result;
-        glGetShaderiv(shader_id, GL_COMPILE_STATUS, &result);
-        if(result) {
-            return 0;
-        }
-        GLsizei length;
-        glGetShaderiv(shader_id, GL_INFO_LOG_LENGTH, &length);
-        if(length != 0) {
-            GLchar *info_log = new GLchar[length];
-            glGetShaderInfoLog(shader_id, length, &length, info_log);
-            LOG_ERROR("Error in shader: {}", info_log);
-            delete[] info_log;
-        } else {
-            LOG_ERROR("Huh? Compile error but no log?");
-        }
-        return -1;
+        gerber_file = g;
+
+        g->draw(*this);
+
+        // create and fill in the GL vertex/index buffers
+
+        vertex_array.init(*program, (GLsizei)vertices.size(), (GLsizei)indices.size());
+        vertex_array.activate();
+
+        gl_vertex_solid *v = (gl_vertex_solid *)glMapBuffer(GL_ARRAY_BUFFER, GL_WRITE_ONLY);
+        memcpy(v, vertices.data(), vertices.size() * sizeof(gl_vertex_solid));
+        glUnmapBuffer(GL_ARRAY_BUFFER);
+
+        GLuint *i = (GLuint *)glMapBuffer(GL_ELEMENT_ARRAY_BUFFER, GL_WRITE_ONLY);
+        memcpy(i, indices.data(), indices.size() * sizeof(GLuint));
+        glUnmapBuffer(GL_ELEMENT_ARRAY_BUFFER);
+
+        LOG_DEBUG("DONE");
     }
 
     //////////////////////////////////////////////////////////////////////
 
-    int gl_program::validate(GLuint param) const
+    void gl_drawer::fill_elements(gerber_draw_element const *elements, size_t num_elements, gerber_polarity polarity, int entity_id)
     {
-        GLint result;
-        glGetProgramiv(program_id, param, &result);
-        if(result) {
-            return 0;
-        }
-        GLsizei length;
-        glGetProgramiv(program_id, GL_INFO_LOG_LENGTH, &length);
-        if(length != 0) {
-            GLchar *info_log = new GLchar[length];
-            glGetProgramInfoLog(program_id, length, &length, info_log);
-            LOG_ERROR("Error in program: %s", info_log);
-            delete[] info_log;
-        } else if(param == GL_LINK_STATUS) {
-            LOG_ERROR("glLinkProgram failed: Can not link program.");
-        } else {
-            LOG_ERROR("glValidateProgram failed: Can not execute shader program.");
-        }
-        return -1;
-    }
+        double constexpr THRESHOLD = 1e-20;
+        double constexpr ARC_DEGREES = 2;
 
-    //////////////////////////////////////////////////////////////////////
+        std::vector<TPPLPoint> points;
 
-    int gl_program::init(char const *const vertex_shader, char const *const fragment_shader)
-    {
-        vertex_shader_id = glCreateShader(GL_VERTEX_SHADER);
-        fragment_shader_id = glCreateShader(GL_FRAGMENT_SHADER);
+        // add a point to the list if it's more than ## away from the previous point
 
-        glShaderSource(vertex_shader_id, 1, &vertex_shader, NULL);
-        glShaderSource(fragment_shader_id, 1, &fragment_shader, NULL);
+        int index = 0;
+        auto add_point = [&](double x, double y) {
+            if(points.empty() || fabs(points.back().x - x) > THRESHOLD || fabs(points.back().y - y) > THRESHOLD) {
+                points.emplace_back(x, y, index++);
+            }
+        };
 
-        glCompileShader(vertex_shader_id);
-        glCompileShader(fragment_shader_id);
+        auto add_arc_point = [&](gerber_draw_element const &element, double t) {
+            double radians = deg_2_rad(t);
+            double x = cos(radians) * element.radius + element.arc_center.x;
+            double y = sin(radians) * element.radius + element.arc_center.y;
+            add_point(x, y);
+        };
 
-        int rc = check_shader(vertex_shader_id);
-        if(rc != 0) {
-            return rc;
-        }
+        // create array of points, approximating arcs
 
-        rc = check_shader(fragment_shader_id);
-        if(rc != 0) {
-            return rc;
-        }
-
-        program_id = glCreateProgram();
-
-        glAttachShader(program_id, vertex_shader_id);
-        glAttachShader(program_id, fragment_shader_id);
-
-        glLinkProgram(program_id);
-        rc = validate(GL_LINK_STATUS);
-        if(rc != 0) {
-            return rc;
-        }
-        glValidateProgram(program_id);
-        rc = validate(GL_VALIDATE_STATUS);
-        if(rc != 0) {
-            return rc;
-        }
-        glUseProgram(program_id);
-
-        projection_location = glGetUniformLocation(program_id, "projection");
-        color_location = glGetUniformLocation(program_id, "color");
-        return 0;
-    }
-
-    //////////////////////////////////////////////////////////////////////
-
-    void gl_program::set_color(uint32_t color) const
-    {
-        float a = ((color >> 24) & 0xff) * 255.0f;
-        float b = ((color >> 16) & 0xff) * 255.0f;
-        float g = ((color >> 8) & 0xff) * 255.0f;
-        float r = ((color >> 0) & 0xff) * 255.0f;
-        glUniform4f(color_location, r, g, b, a);
-    }
-
-    //////////////////////////////////////////////////////////////////////
-
-    void gl_program::cleanup()
-    {
-    }
-
-    //////////////////////////////////////////////////////////////////////
-
-    int gl_vertex_array::init(gl_program &program)
-    {
-        glGenBuffers(1, &vbo_id);
-        glGenBuffers(1, &ibo_id);
-        return 0;
-    }
-
-    //////////////////////////////////////////////////////////////////////
-
-    int gl_vertex_array::activate(gl_program &program) const
-    {
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo_id);
-        glBindBuffer(GL_ARRAY_BUFFER, vbo_id);
-
-        glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(GLushort) * 8192, nullptr, GL_DYNAMIC_DRAW);
-        glBufferData(GL_ARRAY_BUFFER, sizeof(vert) * 8192, nullptr, GL_DYNAMIC_DRAW);
-
-        GLint positionLocation = glGetAttribLocation(program.program_id, "positionIn");
-        GLint colorLocation = glGetAttribLocation(program.program_id, "colorIn");
-
-        glEnableVertexAttribArray(positionLocation);
-        glEnableVertexAttribArray(colorLocation);
-
-        glVertexAttribPointer(positionLocation, 2, GL_FLOAT, GL_FALSE, sizeof(vert), (void *)(offsetof(vert, x)));
-
-        return 0;
-    }
-
-    //////////////////////////////////////////////////////////////////////
-
-    LRESULT CALLBACK gl_drawer::wnd_proc_proxy(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
-    {
-        extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
-
-        if(ImGui_ImplWin32_WndProcHandler(hWnd, message, wParam, lParam)) {
-            return true;
-        }
-
-        if(message == WM_CREATE) {
-            LPCREATESTRUCTA c = reinterpret_cast<LPCREATESTRUCTA>(lParam);
-            SetWindowLongPtrA(hWnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(c->lpCreateParams));
-        }
-        gl_drawer *d = reinterpret_cast<gl_drawer *>(GetWindowLongPtrA(hWnd, GWLP_USERDATA));
-        if(d != nullptr) {
-            return d->wnd_proc(message, wParam, lParam);
-        }
-        return DefWindowProcA(hWnd, message, wParam, lParam);
-    }
-
-    //////////////////////////////////////////////////////////////////////
-
-    LRESULT CALLBACK gl_drawer::wnd_proc(UINT message, WPARAM wParam, LPARAM lParam)
-    {
-        LRESULT result = 0;
-
-        switch(message) {
-
-        case WM_SIZING: {
-            draw();
-            ValidateRect(hwnd, nullptr);
-        } break;
-
-        case WM_SIZE: {
-            ValidateRect(hwnd, nullptr);
-        } break;
-
-        case WM_LBUTTONDOWN: {
-        } break;
-
-        case WM_KEYDOWN:
-
-            switch(wParam) {
-
-            case VK_ESCAPE: {
-                DestroyWindow(hwnd);
-            } break;
-
-            default:
+        for(size_t n = 0; n < num_elements; ++n) {
+            gerber_draw_element const &element = elements[n];
+            switch(element.draw_element_type) {
+            case draw_element_line:
+                add_point(element.line_end.x, element.line_end.y);
+                break;
+            case draw_element_arc:
+                double final_angle = element.end_degrees;
+                if(element.start_degrees < element.end_degrees) {
+                    for(double t = element.start_degrees; t < element.end_degrees; t += ARC_DEGREES) {
+                        add_arc_point(element, t);
+                        final_angle = t;
+                    }
+                } else {
+                    for(double t = element.start_degrees; t > element.end_degrees; t -= ARC_DEGREES) {
+                        add_arc_point(element, t);
+                        final_angle = t;
+                    }
+                }
+                if(final_angle != element.end_degrees) {
+                    add_arc_point(element, element.end_degrees);
+                }
                 break;
             }
-            break;
-
-        case WM_CLOSE:
-            DestroyWindow(hwnd);
-            break;
-
-        case WM_DESTROY:
-            wglMakeCurrent(window_dc, NULL);
-            wglDeleteContext(render_context);
-            render_context = nullptr;
-            ReleaseDC(hwnd, window_dc);
-            PostQuitMessage(0);
-            break;
-
-        case WM_ERASEBKGND:
-            break;
-
-        case WM_PAINT: {
-            ValidateRect(hwnd, nullptr);
-        } break;
-
-        default:
-            result = DefWindowProcA(hwnd, message, wParam, lParam);
         }
-        return result;
+
+        if(points.empty()) {
+            return;
+        }
+
+        // reverse points if they're clockwise
+
+        if(is_clockwise(points)) {
+            std::reverse(points.begin(), points.end());
+            for(int i = 0; i < (int)points.size(); ++i) {
+                points[i].id = i;
+            }
+        }
+
+        // if last point == first point, bin it
+        if(points.back().x == points.front().x && points.back().y == points.front().y) {
+            points.pop_back();
+        }
+
+        // triangulate the points
+
+        TPPLPoly poly;
+        poly.Init((long)points.size());
+        memcpy(poly.GetPoints(), points.data(), sizeof(TPPLPoint) * points.size());
+
+        TPPLPolyList triangles;
+        triangles.clear();
+
+        TPPLPartition part;
+        if(!part.Triangulate_MONO(&poly, &triangles)) {
+            LOG_ERROR("Can't triangulate...?");
+            // add a rectangle to show where the problem is?
+            return;
+        }
+
+        // add verts and indices to the vert/index arrays
+
+        uint32_t index_offset = (uint32_t)indices.size();
+        uint32_t vert_offset = (uint32_t)vertices.size();
+
+        for(auto const &point : points) {
+            vertices.emplace_back((float)point.x, (float)point.y);
+        }
+
+        for(auto const &t : triangles) {
+            if(t.GetNumPoints() != 3) {
+                LOG_ERROR("Huh?");
+            } else {
+                for(int n = 0; n < 3; ++n) {
+                    indices.push_back(t.GetPoint(n).id + vert_offset);
+                }
+            }
+        }
+
+        // register the draw call for this element
+
+        uint32_t length = (uint32_t)(indices.size() - index_offset);
+        draw_calls.emplace_back(index_offset, length, polarity == polarity_clear ? draw_call_flag_clear : 0);
     }
 
     //////////////////////////////////////////////////////////////////////
-
-    int gl_drawer::create_window(int x_pos, int y_pos, int client_width, int client_height)
-    {
-        HINSTANCE instance = GetModuleHandleA(nullptr);
-
-        static constexpr char const *class_name = "GL_CONTEXT_WINDOW_CLASS";
-        static constexpr char const *window_title = "GL Window";
-
-        // register window class
-
-        WNDCLASSEXA wcex{};
-        memset(&wcex, 0, sizeof(wcex));
-        wcex.cbSize = sizeof(WNDCLASSEXA);
-        wcex.style = CS_OWNDC | CS_HREDRAW | CS_VREDRAW | CS_DBLCLKS;
-        wcex.lpfnWndProc = (WNDPROC)wnd_proc_proxy;
-        wcex.hInstance = instance;
-        wcex.hIcon = LoadIcon(NULL, IDI_WINLOGO);
-        wcex.hCursor = LoadCursor(NULL, IDC_ARROW);
-        wcex.lpszClassName = class_name;
-
-        if(!RegisterClassExA(&wcex)) {
-            return -1;
-        }
-
-        // create temp render context
-
-        HWND temp_hwnd = CreateWindowExA(0, class_name, "", 0, 0, 0, 1, 1, nullptr, nullptr, instance, nullptr);
-        if(temp_hwnd == nullptr) {
-            return -2;
-        }
-
-        HDC temp_dc = GetDC(temp_hwnd);
-        if(temp_dc == nullptr) {
-            return -3;
-        }
-
-        PIXELFORMATDESCRIPTOR temp_pixel_format_desc{};
-        temp_pixel_format_desc.nSize = sizeof(PIXELFORMATDESCRIPTOR);
-        temp_pixel_format_desc.nVersion = 1;
-        temp_pixel_format_desc.dwFlags = PFD_DRAW_TO_WINDOW | PFD_SUPPORT_OPENGL;
-        temp_pixel_format_desc.iPixelType = PFD_TYPE_RGBA;
-        temp_pixel_format_desc.cColorBits = 32;
-        temp_pixel_format_desc.cAlphaBits = 8;
-        temp_pixel_format_desc.cDepthBits = 24;
-        int temp_pixelFormat = ChoosePixelFormat(temp_dc, &temp_pixel_format_desc);
-        if(temp_pixelFormat == 0) {
-            return -4;
-        }
-
-        if(!SetPixelFormat(temp_dc, temp_pixelFormat, &temp_pixel_format_desc)) {
-            return -5;
-        }
-
-        HGLRC temp_render_context = wglCreateContext(temp_dc);
-        if(temp_render_context == nullptr) {
-            return -6;
-        }
-
-        // activate temp render context so we can...
-
-        wglMakeCurrent(temp_dc, temp_render_context);
-
-        // ...get some opengl function pointers
-
-        init_gl_functions();
-
-        // now opengl functions are available, create actual window
-
-        fullscreen = false;
-
-        RECT rect{ x_pos, y_pos, client_width, client_height };
-        DWORD style = WS_OVERLAPPEDWINDOW;
-        if(!AdjustWindowRect(&rect, style, false)) {
-            return -7;
-        }
-
-#if 0
-        HMONITOR monitor = MonitorFromPoint({ 0, 0 }, MONITOR_DEFAULTTOPRIMARY);
-
-        MONITORINFO mi = { sizeof(mi) };
-        if(!GetMonitorInfoA(monitor, &mi)) {
-            return -8;
-        }
-
-        int width = rect.right - rect.left;
-        int height = rect.bottom - rect.top;
-        int x = (mi.rcMonitor.right - mi.rcMonitor.left - width) / 2;
-        int y = (mi.rcMonitor.bottom - mi.rcMonitor.top - height) / 2;
-#else
-        int x = rect.left;
-        int y = rect.top;
-        int width = rect.right - x;
-        int height = rect.bottom - y;
-#endif
-
-        hwnd = CreateWindowExA(0, class_name, window_title, style, x, y, width, height, nullptr, nullptr, instance, this);
-        if(hwnd == nullptr) {
-            return -8;
-        }
-
-        window_dc = GetDC(hwnd);
-        if(window_dc == nullptr) {
-            return -9;
-        }
-
-        // create actual render context
-
-        // clang-format off
-
-        static constexpr int const pixel_attributes[] = {
-            WGL_DRAW_TO_WINDOW_ARB, GL_TRUE,
-            WGL_SUPPORT_OPENGL_ARB, GL_TRUE,
-            WGL_DOUBLE_BUFFER_ARB, GL_TRUE,
-            WGL_SWAP_METHOD_ARB, WGL_SWAP_EXCHANGE_ARB,
-            WGL_PIXEL_TYPE_ARB, WGL_TYPE_RGBA_ARB,
-            WGL_ACCELERATION_ARB, WGL_FULL_ACCELERATION_ARB,
-            WGL_COLOR_BITS_ARB, 32,
-            WGL_ALPHA_BITS_ARB, 8,
-            WGL_DEPTH_BITS_ARB, 24,
-            0 };
-
-        static constexpr int const context_attributes[] = {
-            WGL_CONTEXT_MAJOR_VERSION_ARB, 3,
-            WGL_CONTEXT_MINOR_VERSION_ARB, 0,
-            WGL_CONTEXT_PROFILE_MASK_ARB, WGL_CONTEXT_CORE_PROFILE_BIT_ARB,
-            0 };
-
-        // clang-format on
-
-        int pixel_format;
-        UINT num_formats;
-        BOOL status = wglChoosePixelFormatARB(window_dc, pixel_attributes, nullptr, 1, &pixel_format, &num_formats);
-        if(!status || num_formats == 0) {
-            return -10;
-        }
-
-        PIXELFORMATDESCRIPTOR pixel_format_desc{};
-        DescribePixelFormat(window_dc, pixel_format, sizeof(PIXELFORMATDESCRIPTOR), &pixel_format_desc);
-
-        if(!SetPixelFormat(window_dc, pixel_format, &pixel_format_desc)) {
-            return -11;
-        }
-
-        render_context = wglCreateContextAttribsARB(window_dc, 0, context_attributes);
-        if(render_context == nullptr) {
-            return -12;
-        }
-
-        // destroy temp context and window
-
-        wglMakeCurrent(temp_dc, NULL);
-        wglDeleteContext(temp_render_context);
-        ReleaseDC(temp_hwnd, temp_dc);
-        DestroyWindow(temp_hwnd);
-
-        // activate the true render context
-
-        wglMakeCurrent(window_dc, render_context);
-        wglSwapIntervalEXT(1);
-
-        // init ImGui
-
-        IMGUI_CHECKVERSION();
-        ImGui::CreateContext();
-        ImGuiIO &io = ImGui::GetIO();
-        io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;    // Enable Keyboard Controls
-        io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;     // Enable Gamepad Controls
-
-        ImGui::StyleColorsDark();
-
-        ImGui_ImplWin32_InitForOpenGL(hwnd);
-        ImGui_ImplOpenGL3_Init();
-
-        // setup shader and vertex array
-
-        if(program.init(vertex_shader_source, fragment_shader_source) != 0) {
-            LOG_ERROR("program.init failed - exiting");
-            return -13;
-        }
-
-        if(verts.init(program) != 0) {
-            LOG_ERROR("verts.init failed - exiting");
-            return -14;
-        }
-
-        verts.activate(program);
-
-        // really done
-
-        ShowWindow(hwnd, SW_SHOW);
-
-        return 0;
-    }
-
-    void gl_drawer::set_gerber(gerber_lib::gerber *g)
-    {
-    }
-
-    void gl_drawer::fill_elements(gerber_lib::gerber_draw_element const *elements, size_t num_elements, gerber_lib::gerber_polarity polarity, int entity_id)
-    {
-    }
 
     void gl_drawer::draw()
     {
-        static int counter = 0;
-
-        ImGui_ImplOpenGL3_NewFrame();
-        ImGui_ImplWin32_NewFrame();
-        ImGui::NewFrame();
-        ImGui::Begin("Hello, world!");
-        ImGui::Text("This is some useful text.");
-        if(ImGui::Button("Button")) {
-            counter++;
+        if(draw_calls.empty()) {
+            return;
         }
-        ImGui::SameLine();
-        ImGui::Text("counter = %d", counter);
-        ImGuiIO &io = ImGui::GetIO();
-        ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / io.Framerate, io.Framerate);
-        ImGui::End();
-        ImGui::Render();
 
-        RECT rc;
-        GetClientRect(hwnd, &rc);
-        window_width = rc.right;
-        window_height = rc.bottom;
-        glViewport(0, 0, window_width, window_height);
-        gl_matrix projection_matrix;
-        make_ortho(projection_matrix, window_width, window_height);
-        glUniformMatrix4fv(program.projection_location, 1, true, projection_matrix);
-        glClearColor(0.1f, 0.2f, 0.5f, 0);
-        glClear(GL_COLOR_BUFFER_BIT);
+        vertex_array.activate();
 
-        vert *v = (vert *)glMapBuffer(GL_ARRAY_BUFFER, GL_WRITE_ONLY);
-        GLushort *i = (GLushort *)glMapBuffer(GL_ELEMENT_ARRAY_BUFFER, GL_WRITE_ONLY);
-        memcpy(v, test_vertices.data(), test_vertices.size() * sizeof(vert));
-        memcpy(i, test_indices.data(), test_indices.size() * sizeof(GLushort));
-        glUnmapBuffer(GL_ELEMENT_ARRAY_BUFFER);
-        glUnmapBuffer(GL_ARRAY_BUFFER);
         glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 
-        program.set_color(0xffffffff);
-        glDrawElements(GL_TRIANGLES, (GLsizei)test_indices.size(), GL_UNSIGNED_SHORT, (GLvoid *)0);
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-        ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-
-        SwapBuffers(window_dc);
+        for(auto const &d : draw_calls) {
+            uint32_t color = 0x4000ff00;
+            if(d.flags & draw_call_flag_clear) {
+                color = 0x40000000;
+            }
+            program->set_color(color);
+            glDrawElements(GL_TRIANGLES, d.length, GL_UNSIGNED_INT, (GLvoid *)(d.offset * sizeof(GLuint)));
+        }
     }
 
 }    // namespace gerber_3d

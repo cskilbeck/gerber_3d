@@ -2423,7 +2423,7 @@ namespace gerber_lib
             // might be just a circle if it's too thick to show the middle bit
             if(inner_radius > 0) {
                 add_line({ pos.x + outer_radius, pos.y }, { pos.x + inner_radius, pos.y });
-                add_arc(pos, inner_radius, 0, 360);
+                add_arc(pos, inner_radius, 360, 0);
             }
 
         } else {

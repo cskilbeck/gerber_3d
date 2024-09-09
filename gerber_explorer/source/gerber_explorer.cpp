@@ -10,7 +10,7 @@
 #include "gerber_settings.h"
 //#include "gdi_drawer.h"
 //#include "occ_drawer.h"
-#include "gl_drawer.h"
+#include "gl_window.h"
 
 //////////////////////////////////////////////////////////////////////
 
@@ -35,7 +35,7 @@ int main(int argc, char **argv)
     // gdi.create_window(850, 100, 700, 700);
     // gdi.load_gerber_file(filename);
 
-    gerber_3d::gl_drawer gl;
+    gerber_3d::gl_window gl;
     gl.create_window(100, 100, 700, 700);
 
     bool done = false;

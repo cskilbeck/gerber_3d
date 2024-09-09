@@ -186,7 +186,7 @@ namespace
     // make a matrix which maps window rect to world coordinates
     // if aspect ratio(view_rect) != aspect_ratio(window_rect), there will be distortion
 
-    matrix world_to_window_transform_matrix(rect const &window, rect const &view)
+    matrix make_world_to_window_transform(rect const &window, rect const &view)
     {
         matrix origin = matrix::translate(view.min_pos.negate());
         matrix scale = matrix::scale({ window.width() / view.width(), window.height() / view.height() });
@@ -1068,7 +1068,7 @@ namespace gerber_3d
 
         graphics->FillRectangle(clear_brush[0], 0, 0, (INT)window_size.x, (INT)window_size.y);
 
-        world_to_window_matrix = world_to_window_transform_matrix(window_rect, view_rect);
+        world_to_window_matrix = make_world_to_window_transform(window_rect, view_rect);
 
         Matrix gdi_matrix;
         set_gdi_matrix(world_to_window_matrix, gdi_matrix);
