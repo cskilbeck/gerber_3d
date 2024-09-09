@@ -86,7 +86,7 @@ namespace gerber_lib
 
             std::string to_string() const
             {
-                return std::format("(X:{:7.3f},Y:{:7.3f})", x, y);
+                return std::format("(X:{:g},Y:{:g})", x, y);
             }
         };
     }    // namespace gerber_2d

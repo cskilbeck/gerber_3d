@@ -644,13 +644,13 @@ namespace gerber_lib
             return "None";
         } break;
         case aperture_type_circle: {
-            return std::format("Circle, radius {:8.4f}{}", parameters[0] / scale, units);
+            return std::format("Circle, radius {:g}{}", parameters[0] / scale, units);
         } break;
         case aperture_type_rectangle: {
-            return std::format("Rect, {:8.4f}x{:8.4f}{}", parameters[0] / scale, parameters[1] / scale, units);
+            return std::format("Rect, {:g}x{:g}{}", parameters[0] / scale, parameters[1] / scale, units);
         } break;
         case aperture_type_oval: {
-            return std::format("Oval, {:8.4f}x{:8.4f}{}", parameters[0] / scale, parameters[1] / scale, units);
+            return std::format("Oval, {:g}x{:g}{}", parameters[0] / scale, parameters[1] / scale, units);
         } break;
         case aperture_type_polygon: {
             return std::format("Polygon");

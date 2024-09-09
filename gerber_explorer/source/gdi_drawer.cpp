@@ -369,8 +369,8 @@ namespace gerber_3d
             int path_id = entity.path_id;
             for(int n = 0; n < entity.num_paths; ++n) {
                 std::vector<PointF> const &gdi_points = gdi_point_lists[path_id];
-                bool selected = selection_rect.Contains(entity.pixel_space_bounds) ||
-                                rect_intersects_with_polygon(gdi_points.data(), gdi_points.size(), selection_rect);
+                bool selected =
+                    selection_rect.Contains(entity.pixel_space_bounds) || rect_intersects_with_polygon(gdi_points.data(), gdi_points.size(), selection_rect);
                 if(toggle) {
                     entity.selected = selected;
                 } else {
@@ -1205,7 +1205,7 @@ namespace gerber_3d
             } else {
                 gerber_aperture *aperture = f->second;
                 aperture_info = std::format("D{} - {}", aperture->aperture_number, aperture->get_description(get_units(), units_string()));
-                net_info = std::format("At {:9.5f},{:9.5f}{}", convert_units(net->end.x), convert_units(net->end.y), units_string());
+                net_info = std::format("At {:g},{:g}{}", convert_units(net->end.x), convert_units(net->end.y), units_string());
 
                 // net->aperture_state should be aperture_state_flash at this point...
             }
@@ -1217,18 +1217,18 @@ namespace gerber_3d
                 switch(net->interpolation_method) {
                 case interpolation_linear:
                     draw = "Linear";
-                    net_info = std::format("From {:9.5f},{:9.5f}{}\n  To {:9.5f},{:9.5f}{}", convert_units(net->start.x), convert_units(net->start.y),
-                                           units_string(), convert_units(net->end.x), convert_units(net->end.y), units_string());
+                    net_info = std::format("From {:g},{:g}{}\n  To {:g},{:g}{}", convert_units(net->start.x), convert_units(net->start.y), units_string(),
+                                           convert_units(net->end.x), convert_units(net->end.y), units_string());
                     break;
                 case interpolation_clockwise_circular:
                     draw = "Clockwise";
-                    net_info = std::format("At {:9.5f},{:9.5f}{}\nRadius {:6.4f}{}\nFrom {:5.1f}\n  To {:5.1f}", convert_units(net->circle_segment.pos.x),
+                    net_info = std::format("At {:g},{:g}{}\nRadius {:g}{}\nFrom {:g}\n  To {:g}", convert_units(net->circle_segment.pos.x),
                                            convert_units(net->circle_segment.pos.y), units_string(), convert_units(net->circle_segment.size.x), units_string(),
                                            net->circle_segment.start_angle, net->circle_segment.end_angle);
                     break;
                 case interpolation_counterclockwise_circular:
                     draw = "Counter clockwise";
-                    net_info = std::format("At {:9.5f},{:9.5f}{}\nRadius {:6.4f}{}\nFrom {:5.1f}\n  To {:5.1f}", convert_units(net->circle_segment.pos.x),
+                    net_info = std::format("At {:g},{:g}{}\nRadius {:g}{}\nFrom {:g}\n  To {:g}", convert_units(net->circle_segment.pos.x),
                                            convert_units(net->circle_segment.pos.y), units_string(), convert_units(net->circle_segment.size.x), units_string(),
                                            net->circle_segment.start_angle, net->circle_segment.end_angle);
                     break;
@@ -1251,7 +1251,7 @@ namespace gerber_3d
                                            "Draw {}\n"            //
                                            "{}\n"                 //
                                            "Polarity {}\n"        //
-                                           "{}\n"                 //
+                                           "{}"                   //
                                            ,
                                            highlight_entity_id, line,    //
                                            aperture_info,                //
