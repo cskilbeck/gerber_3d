@@ -39,6 +39,7 @@ namespace gerber_3d
         GLuint vertex_shader_id{};
         GLuint fragment_shader_id{};
         GLuint projection_location{};
+        GLuint color_location{};
 
         float projection_matrix[16] = {};
 
@@ -46,6 +47,8 @@ namespace gerber_3d
         int validate(GLuint param) const;
         int init(char const *const vertex_shader, char const *const fragment_shader);
         void cleanup();
+
+        void set_color(uint32_t color) const;
     };
 
     //////////////////////////////////////////////////////////////////////

@@ -30,24 +30,23 @@ namespace
     struct vert
     {
         float x, y;
-        uint32_t color;
     };
 
-    std::vector<vert> test_vertices{ { 10, 10, 0xff00ffff }, { 100, 30, 0xffff00ff }, { 80, 70, 0xff0000ff }, { 20, 60, 0xff00ff00 } };
+    std::vector<vert> test_vertices{ { 10, 10 }, { 100, 30 }, { 80, 70 }, { 20, 60 } };
     std::vector<GLushort> test_indices{ 0, 1, 2, 0, 2, 3 };
 
     char const *vertex_shader_source = R"-----(
 
         #version 400
         in vec2 positionIn;
-        in vec4 colorIn;
         out vec4 fragmentColor;
 
         uniform mat4 projection;
+        uniform vec4 color;
 
         void main() {
             gl_Position = projection * vec4(positionIn, 0.0f, 1.0f);
-            fragmentColor = colorIn;
+            fragmentColor = color;
         
         })-----";
 
@@ -184,7 +183,19 @@ namespace gerber_3d
         glUseProgram(program_id);
 
         projection_location = glGetUniformLocation(program_id, "projection");
+        color_location = glGetUniformLocation(program_id, "color");
         return 0;
+    }
+
+    //////////////////////////////////////////////////////////////////////
+
+    void gl_program::set_color(uint32_t color) const
+    {
+        float a = ((color >> 24) & 0xff) * 255.0f;
+        float b = ((color >> 16) & 0xff) * 255.0f;
+        float g = ((color >> 8) & 0xff) * 255.0f;
+        float r = ((color >> 0) & 0xff) * 255.0f;
+        glUniform4f(color_location, r, g, b, a);
     }
 
     //////////////////////////////////////////////////////////////////////
@@ -219,7 +230,6 @@ namespace gerber_3d
         glEnableVertexAttribArray(colorLocation);
 
         glVertexAttribPointer(positionLocation, 2, GL_FLOAT, GL_FALSE, sizeof(vert), (void *)(offsetof(vert, x)));
-        glVertexAttribPointer(colorLocation, 4, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(vert), (void *)(offsetof(vert, color)));
 
         return 0;
     }
@@ -543,6 +553,8 @@ namespace gerber_3d
         glUnmapBuffer(GL_ELEMENT_ARRAY_BUFFER);
         glUnmapBuffer(GL_ARRAY_BUFFER);
         glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+
+        program.set_color(0xffffffff);
         glDrawElements(GL_TRIANGLES, (GLsizei)test_indices.size(), GL_UNSIGNED_SHORT, (GLvoid *)0);
 
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
