@@ -36,7 +36,11 @@ target_include_directories(${PROJECT} PRIVATE ${OpenCASCADE_INCLUDE_DIR})
 
 # ImGui
 
-set(IMGUI_PATH "c:/dev/imgui-1.91.1")
+set(IMGUI_PATH "" CACHE PATH "Path to ImGui")
+
+if(NOT EXISTS "${IMGUI_PATH}")
+    message(SEND_ERROR "The ImGui path '${IMGUI_PATH}' does not exist or is invalid")
+endif()
 
 file(GLOB IMGUI_SOURCES
     ${IMGUI_PATH}/*.cpp
