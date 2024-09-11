@@ -14,6 +14,8 @@
 #include <windowsx.h>
 #include <Commdlg.h>
 
+#include <filesystem>
+
 #include <gl/GL.h>
 #include <gl/GLU.h>
 #include "Wglext.h"
@@ -356,8 +358,16 @@ namespace gerber_3d
                     gl_drawer *drawer = new gl_drawer();
                     drawer->program = &solid_program;
                     drawer->set_gerber(g);
-                    drawer->layer_color = layer_colors[layers.size() % gerber_util::array_length(layer_colors)];
-                    layers.push_back(drawer);
+
+                    gerber_layer *layer = new gerber_layer();
+                    layer->layer = drawer;
+                    layer->fill_color = layer_colors[layers.size() % gerber_util::array_length(layer_colors)];
+                    layer->clear_color = color::black;
+                    layer->outline_color = color::white & 0x80ffffff;
+                    layer->outline = false;
+                    layer->filename = std::filesystem::path(filename).filename().string();
+                    layers.push_back(layer);
+
                     zoom_to_rect(g->image.info.extent);
                 }
             }
@@ -584,22 +594,37 @@ namespace gerber_3d
             }
             ImGui::EndMenuBar();
         }
-        ImGuiIO &io = ImGui::GetIO();
-        ImGui::Text("(%.1f FPS (%.3f ms)", io.Framerate, 1000.0f / io.Framerate);
-        if(!layers.empty()) {
-            static bool color_picker_active = false;
-            ImVec4 layer_color_f;
-            color::to_floats(layers.front()->layer_color, &layer_color_f.x);
-            if(ImGui::ColorButton("Color", layer_color_f, ImGuiColorEditFlags_DisplayHex | ImGuiColorEditFlags_DisplayRGB)) {
-                color_picker_active = !color_picker_active;
-            }
-            if(color_picker_active) {
-                if(ImGui::ColorPicker4("Color", &layer_color_f.x,
-                                       ImGuiColorEditFlags_DisplayHex | ImGuiColorEditFlags_DisplayRGB | ImGuiColorEditFlags_AlphaBar |
-                                           ImGuiColorEditFlags_AlphaPreview)) {
-                    layers.front()->layer_color = color::from_floats(&layer_color_f.x);
+        for(auto const layer : layers) {
+            if(ImGui::CollapsingHeader(layer->filename.c_str(), ImGuiTreeNodeFlags_OpenOnArrow)) {
+                ImVec4 fill_color_f;
+                ImVec4 clear_color_f;
+                ImVec4 outline_color_f;
+                color::to_floats(layer->fill_color, &fill_color_f.x);
+                color::to_floats(layer->clear_color, &clear_color_f.x);
+                color::to_floats(layer->outline_color, &outline_color_f.x);
+                auto flags = ImGuiColorEditFlags_AlphaBar | ImGuiColorEditFlags_AlphaPreview | ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoTooltip;
+                if(ImGui::ColorEdit4("Fill", &fill_color_f.x, flags)) {
+                    layer->fill_color = color::from_floats(&fill_color_f.x);
+                }
+                ImGui::SameLine();
+                if(ImGui::ColorEdit4("Clear", &clear_color_f.x, flags)) {
+                    layer->clear_color = color::from_floats(&clear_color_f.x);
+                }
+                ImGui::Checkbox("Outline", &layer->outline);
+                if(layer->outline) {
+                    ImGui::SameLine();
+                    if(ImGui::ColorEdit4("", &outline_color_f.x, flags)) {
+                        layer->outline_color = color::from_floats(&outline_color_f.x);
+                    }
                 }
             }
+        }
+        ImGui::End();
+
+        ImGui::Begin("Stats");
+        {
+            ImGuiIO &io = ImGui::GetIO();
+            ImGui::Text("(%.1f FPS (%.3f ms)", io.Framerate, 1000.0f / io.Framerate);
         }
         ImGui::End();
         ImGui::Render();
@@ -639,7 +664,7 @@ namespace gerber_3d
         glClear(GL_COLOR_BUFFER_BIT);
 
         for(auto layer : layers) {
-            layer->draw();
+            layer->layer->draw(layer->fill_color, layer->clear_color, layer->outline, layer->outline_color);
         }
 
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());

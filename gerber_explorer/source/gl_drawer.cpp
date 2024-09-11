@@ -125,7 +125,7 @@ namespace gerber_3d
 
     //////////////////////////////////////////////////////////////////////
 
-    void gl_drawer::draw()
+    void gl_drawer::draw(uint32_t fill_color, uint32_t clear_color, bool outline, uint32_t outline_color)
     {
         program->use();
         vertex_array.activate();
@@ -136,17 +136,16 @@ namespace gerber_3d
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
         for(size_t n = 0; n < triangulator.draw_calls.size(); ++n) {
+
             tesselator_draw_call &d = triangulator.draw_calls[n];
 
-            uint32_t draw_color = layer_color;
-            if(d.flags & 1) {
-                draw_color = 0xC0000000;
-            }
-            program->set_color(draw_color);
+            program->set_color((d.flags & 1) ? clear_color : fill_color);
             d.draw_filled();
 
-            program->set_color(0x60ffffff);
-            d.draw_outline();
+            if(outline) {
+                program->set_color(outline_color);
+                d.draw_outline();
+            }
         }
         //triangulator.draw_range(0, triangulator.draw_calls.size(), tesselator::draw_flag_filled | tesselator::draw_flag_outline);
     }

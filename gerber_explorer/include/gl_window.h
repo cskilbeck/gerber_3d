@@ -34,7 +34,17 @@ namespace gerber_3d
     {
         LOG_CONTEXT("gl_drawer", debug);
 
-        std::list<gl_drawer *> layers;
+        struct gerber_layer
+        {
+            gl_drawer *layer{ nullptr };
+            bool outline{ false };
+            std::string filename;
+            uint32_t fill_color;
+            uint32_t clear_color;
+            uint32_t outline_color;
+        };
+
+        std::list<gerber_layer *> layers;
 
         using vec2d = gerber_lib::gerber_2d::vec2d;
         using rect = gerber_lib::gerber_2d::rect;
