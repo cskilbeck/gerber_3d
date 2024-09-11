@@ -38,6 +38,8 @@ int main(int argc, char **argv)
     gerber_3d::gl_window gl;
     gl.create_window(100, 100, 700, 700);
 
+    ShowWindow(gl.hwnd, SW_SHOW);
+
     bool done = false;
     while(!done) {
         // Poll and handle messages (inputs, window resize, etc.)

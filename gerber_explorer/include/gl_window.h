@@ -14,122 +14,19 @@
 #include "glcorearb.h"
 
 #include "gl_functions.h"
+#include "gl_colors.h"
 
 #include "gerber_lib.h"
 #include "gerber_log.h"
 #include "gerber_2d.h"
 #include "gerber_draw.h"
+#include "gl_base.h"
 
 //////////////////////////////////////////////////////////////////////
 
 namespace gerber_3d
 {
-    struct gl_program;
-    struct gl_vertex_array;
     struct gl_drawer;
-
-    //////////////////////////////////////////////////////////////////////
-
-    struct gl_vertex_solid
-    {
-        float x, y;
-    };
-
-    //////////////////////////////////////////////////////////////////////
-
-    struct gl_vertex_color
-    {
-        float x, y;
-        uint32_t color;
-    };
-
-    //////////////////////////////////////////////////////////////////////
-    // base gl_program - transform matrix is common to all
-
-    struct gl_program
-    {
-        LOG_CONTEXT("gl_program", debug);
-
-        gl_program() = default;
-
-        GLuint program_id{};
-        GLuint vertex_shader_id{};
-        GLuint fragment_shader_id{};
-
-        GLuint transform_location{};
-
-        int check_shader(GLuint shader_id) const;
-        int validate(GLuint param) const;
-        int init(char const *const vertex_shader, char const *const fragment_shader);
-        void cleanup();
-
-        virtual int on_init() = 0;
-    };
-
-    //////////////////////////////////////////////////////////////////////
-    // uniform color
-
-    struct gl_solid_program : gl_program
-    {
-        GLuint color_location{};
-
-        int on_init() override;
-
-        void set_color(uint32_t color) const;
-    };
-
-    //////////////////////////////////////////////////////////////////////
-    // color per vertex
-
-    struct gl_color_program : gl_program
-    {
-        int on_init() override
-        {
-            return 0;
-        }
-    };
-
-    //////////////////////////////////////////////////////////////////////
-
-    struct gl_vertex_array
-    {
-        GLuint vbo_id{ 0 };
-        GLuint ibo_id{ 0 };
-        int num_verts{ 0 };
-        int num_indices{ 0 };
-
-        gl_vertex_array() = default;
-
-        virtual int init(gl_program &program, GLsizei vert_count, GLsizei index_count);
-        virtual int activate() const;
-
-        void cleanup();
-    };
-
-    //////////////////////////////////////////////////////////////////////
-
-    struct gl_vertex_array_solid : gl_vertex_array
-    {
-        gl_vertex_array_solid() = default;
-
-        int position_location{ 0 };
-        
-        int init(gl_program &program, GLsizei vert_count, GLsizei index_count) override;
-        int activate() const override;
-    };
-
-    //////////////////////////////////////////////////////////////////////
-
-    struct gl_vertex_array_color : gl_vertex_array
-    {
-        gl_vertex_array_color() = default;
-
-        int position_location{ 0 };
-        int color_location{ 0 };
-
-        int init(gl_program &program, GLsizei vert_count, GLsizei index_count) override;
-        int activate() const override;
-    };
 
     //////////////////////////////////////////////////////////////////////
 
@@ -183,6 +80,7 @@ namespace gerber_3d
         gl_color_program color_program{};
 
         gl_vertex_array verts{};
+        gl_index_array indices{};
 
         int window_width{};
         int window_height{};

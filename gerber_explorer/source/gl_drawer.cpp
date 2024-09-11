@@ -9,19 +9,17 @@
 #include <windowsx.h>
 
 #include <gl/GL.h>
+#include <gl/GLU.h>
 
 #include "Wglext.h"
 #include "glcorearb.h"
 
 #include "gl_window.h"
 #include "gl_functions.h"
-#include "polypartition.h"
 
 #include "gl_drawer.h"
 #include "gerber_lib.h"
 #include "gerber_log.h"
-
-#include "polypartition.h"
 
 LOG_CONTEXT("gl_drawer", debug);
 
@@ -29,7 +27,7 @@ namespace
 {
     using namespace gerber_lib;
 
-    bool is_clockwise(std::vector<TPPLPoint> const &points)
+    template <typename T> bool is_clockwise(std::vector<T> const &points)
     {
         double t = 0;
         for(size_t i = 0, n = points.size() - 1; i < points.size(); n = i++) {
@@ -43,24 +41,25 @@ namespace gerber_3d
 {
     //////////////////////////////////////////////////////////////////////
 
+    void gl_drawer::set_alpha(int alpha)
+    {
+        layer_color = (layer_color & 0xffffff) | (alpha << 24);
+    }
+
+    //////////////////////////////////////////////////////////////////////
+
     void gl_drawer::set_gerber(gerber *g)
     {
         gerber_file = g;
-
+        triangulator.clear();
         g->draw(*this);
 
         // create and fill in the GL vertex/index buffers
-
-        vertex_array.init(*program, (GLsizei)vertices.size(), (GLsizei)indices.size());
+        vertex_array.init(*program, (GLsizei)triangulator.vertices.size());
         vertex_array.activate();
-
-        gl_vertex_solid *v = (gl_vertex_solid *)glMapBuffer(GL_ARRAY_BUFFER, GL_WRITE_ONLY);
-        memcpy(v, vertices.data(), vertices.size() * sizeof(gl_vertex_solid));
-        glUnmapBuffer(GL_ARRAY_BUFFER);
-
-        GLuint *i = (GLuint *)glMapBuffer(GL_ELEMENT_ARRAY_BUFFER, GL_WRITE_ONLY);
-        memcpy(i, indices.data(), indices.size() * sizeof(GLuint));
-        glUnmapBuffer(GL_ELEMENT_ARRAY_BUFFER);
+        indices_triangles.init((GLsizei)triangulator.indices.size());
+        indices_triangles.activate();
+        triangulator.finalize();
 
         LOG_DEBUG("DONE");
     }
@@ -69,17 +68,16 @@ namespace gerber_3d
 
     void gl_drawer::fill_elements(gerber_draw_element const *elements, size_t num_elements, gerber_polarity polarity, int entity_id)
     {
-        double constexpr THRESHOLD = 1e-20;
+        double constexpr THRESHOLD = 1e-38;
         double constexpr ARC_DEGREES = 2;
 
-        std::vector<TPPLPoint> points;
+        std::vector<vec2d> points;
 
         // add a point to the list if it's more than ## away from the previous point
 
-        int index = 0;
         auto add_point = [&](double x, double y) {
             if(points.empty() || fabs(points.back().x - x) > THRESHOLD || fabs(points.back().y - y) > THRESHOLD) {
-                points.emplace_back(x, y, index++);
+                points.emplace_back(x, y);
             }
         };
 
@@ -122,15 +120,6 @@ namespace gerber_3d
             return;
         }
 
-        // reverse points if they're clockwise
-
-        if(is_clockwise(points)) {
-            std::reverse(points.begin(), points.end());
-            for(int i = 0; i < (int)points.size(); ++i) {
-                points[i].id = i;
-            }
-        }
-
         // if last point == first point, bin it
         if(points.back().x == points.front().x && points.back().y == points.front().y) {
             points.pop_back();
@@ -138,68 +127,35 @@ namespace gerber_3d
 
         // triangulate the points
 
-        TPPLPoly poly;
-        poly.Init((long)points.size());
-        memcpy(poly.GetPoints(), points.data(), sizeof(TPPLPoint) * points.size());
-
-        TPPLPolyList triangles;
-        triangles.clear();
-
-        TPPLPartition part;
-        if(!part.Triangulate_MONO(&poly, &triangles)) {
-            LOG_ERROR("Can't triangulate...?");
-            // add a rectangle to show where the problem is?
-            return;
-        }
-
-        // add verts and indices to the vert/index arrays
-
-        uint32_t index_offset = (uint32_t)indices.size();
-        uint32_t vert_offset = (uint32_t)vertices.size();
-
-        for(auto const &point : points) {
-            vertices.emplace_back((float)point.x, (float)point.y);
-        }
-
-        for(auto const &t : triangles) {
-            if(t.GetNumPoints() != 3) {
-                LOG_ERROR("Huh?");
-            } else {
-                for(int n = 0; n < 3; ++n) {
-                    indices.push_back(t.GetPoint(n).id + vert_offset);
-                }
-            }
-        }
-
-        // register the draw call for this element
-
-        uint32_t length = (uint32_t)(indices.size() - index_offset);
-        draw_calls.emplace_back(index_offset, length, polarity == polarity_clear ? draw_call_flag_clear : 0);
+        triangulator.append(points.data(), (int)points.size(), polarity == polarity_clear ? 1 : 0);
     }
 
     //////////////////////////////////////////////////////////////////////
 
     void gl_drawer::draw()
     {
-        if(draw_calls.empty()) {
-            return;
-        }
-
+        program->use();
         vertex_array.activate();
+        indices_triangles.activate();
 
         glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-        for(auto const &d : draw_calls) {
-            uint32_t color = 0x4000ff00;
-            if(d.flags & draw_call_flag_clear) {
-                color = 0x40000000;
+        for(size_t n = 0; n < triangulator.draw_calls.size(); ++n) {
+            tesselator_draw_call &d = triangulator.draw_calls[n];
+
+            uint32_t draw_color = layer_color;
+            if(d.flags & 1) {
+                draw_color = 0xC0000000;
             }
-            program->set_color(color);
-            glDrawElements(GL_TRIANGLES, d.length, GL_UNSIGNED_INT, (GLvoid *)(d.offset * sizeof(GLuint)));
+            program->set_color(draw_color);
+            d.draw_filled();
+
+            program->set_color(0x60ffffff);
+            d.draw_outline();
         }
+        //triangulator.draw_range(0, triangulator.draw_calls.size(), tesselator::draw_flag_filled | tesselator::draw_flag_outline);
     }
 
 }    // namespace gerber_3d

@@ -15,179 +15,33 @@
 #include <Commdlg.h>
 
 #include <gl/GL.h>
-
+#include <gl/GLU.h>
 #include "Wglext.h"
 #include "glcorearb.h"
 
+#include "gl_base.h"
+#include "gl_matrix.h"
 #include "gl_window.h"
 #include "gl_functions.h"
-#include "polypartition.h"
 
 #include "imgui.h"
 #include "imgui_impl_opengl3.h"
 #include "imgui_impl_win32.h"
-
-#pragma comment(lib, "opengl32.lib")
-
-// #define DRAW_TEST
 
 namespace
 {
     //////////////////////////////////////////////////////////////////////
 
     using vec2d = gerber_lib::gerber_2d::vec2d;
-    using gl_matrix = float[16];
 
     using namespace gerber_lib;
+    using namespace gerber_3d;
 
-    double const drag_offset_start_distance = 16;
+    double const drag_select_offset_start_distance = 16;
 
-#if defined(DRAW_TEST)
-    std::vector<gerber_3d::gl_vertex> test_vertices{ { 10, 10 }, { 100, 30 }, { 80, 70 }, { 20, 60 } };
-    std::vector<GLuint> test_indices{ 0, 1, 2, 0, 2, 3 };
-#endif
+    uint32_t layer_colors[] = { color::red, color::green, color::dark_cyan, color::lime_green, color::antique_white, color::corn_flower_blue, color::gold };
 
-    //////////////////////////////////////////////////////////////////////
-
-    char const *solid_vertex_shader_source = R"#(
-
-        #version 400
-
-        in vec2 position;
-
-        out vec4 fragment;
-
-        uniform mat4 transform;
-        uniform vec4 color;
-
-        void main() {
-            gl_Position = transform * vec4(position, 0.0f, 1.0f);
-            fragment = color;
-        }
-
-        )#";
-
-    //////////////////////////////////////////////////////////////////////
-
-    char const *color_vertex_shader_source = R"#(
-
-        #version 400
-
-        in vec2 position;
-        in vec4 color;
-
-        out vec4 fragment;
-
-        uniform mat4 transform;
-
-        void main() {
-            gl_Position = transform * vec4(position, 0.0f, 1.0f);
-            fragment = color;
-        }
-
-        )#";
-
-    //////////////////////////////////////////////////////////////////////
-
-    char const *fragment_shader_source = R"#(
-
-        #version 400
-
-        in vec4 fragment;
-        out vec4 color;
-
-        void main() {
-            color = fragment;
-        }
-
-        )#";
-
-    //////////////////////////////////////////////////////////////////////
-
-    void make_ortho(gl_matrix mat, int w, int h)
-    {
-        mat[0] = 2.0f / w;
-        mat[1] = 0.0f;
-        mat[2] = 0.0f;
-        mat[3] = -1.0f;
-
-        mat[4] = 0.0f;
-        mat[5] = 2.0f / h;
-        mat[6] = 0.0f;
-        mat[7] = -1.0f;
-
-        mat[8] = 0.0f;
-        mat[9] = 0.0f;
-        mat[10] = -1.0f;
-        mat[11] = 0.0f;
-
-        mat[12] = 0.0f;
-        mat[13] = 0.0f;
-        mat[14] = 0.0f;
-        mat[15] = 1.0f;
-    }
-
-    //////////////////////////////////////////////////////////////////////
-
-    void make_translate(gl_matrix mat, float x, float y)
-    {
-        mat[0] = 1.0f;
-        mat[1] = 0.0f;
-        mat[2] = 0.0f;
-        mat[3] = x;
-
-        mat[4] = 0.0f;
-        mat[5] = 1.0f;
-        mat[6] = 0.0f;
-        mat[7] = y;
-
-        mat[8] = 0.0f;
-        mat[9] = 0.0f;
-        mat[10] = 1.0f;
-        mat[11] = 0.0f;
-
-        mat[12] = 0.0f;
-        mat[13] = 0.0f;
-        mat[14] = 0.0f;
-        mat[15] = 1.0f;
-    }
-
-    //////////////////////////////////////////////////////////////////////
-
-    void make_scale(gl_matrix mat, float x_scale, float y_scale)
-    {
-        mat[0] = x_scale;
-        mat[1] = 0.0f;
-        mat[2] = 0.0f;
-        mat[3] = 0.0f;
-
-        mat[4] = 0.0f;
-        mat[5] = y_scale;
-        mat[6] = 0.0f;
-        mat[7] = 0.0f;
-
-        mat[8] = 0.0f;
-        mat[9] = 0.0f;
-        mat[10] = 1.0f;
-        mat[11] = 0.0f;
-
-        mat[12] = 0.0f;
-        mat[13] = 0.0f;
-        mat[14] = 0.0f;
-        mat[15] = 1.0f;
-    }
-
-    //////////////////////////////////////////////////////////////////////
-
-    void matrix_multiply(gl_matrix const a, gl_matrix const b, gl_matrix out)
-    {
-        for(int i = 0; i < 16; i += 4) {
-            out[i + 0] = a[i] * b[0] + a[i + 1] * b[4] + a[i + 2] * b[8] + a[i + 3] * b[12];
-            out[i + 1] = a[i] * b[1] + a[i + 1] * b[5] + a[i + 2] * b[9] + a[i + 3] * b[13];
-            out[i + 2] = a[i] * b[2] + a[i + 1] * b[6] + a[i + 2] * b[10] + a[i + 3] * b[14];
-            out[i + 3] = a[i] * b[3] + a[i + 1] * b[7] + a[i + 2] * b[11] + a[i + 3] * b[15];
-        }
-    }
+    int layer_alpha = 128;
 
     //////////////////////////////////////////////////////////////////////
     // make a rectangle have a certain aspect ratio by shrinking or expanding it
@@ -251,212 +105,6 @@ namespace
 
 namespace gerber_3d
 {
-    //////////////////////////////////////////////////////////////////////
-
-    int gl_program::check_shader(GLuint shader_id) const
-    {
-        GLint result;
-        glGetShaderiv(shader_id, GL_COMPILE_STATUS, &result);
-        if(result) {
-            return 0;
-        }
-        GLsizei length;
-        glGetShaderiv(shader_id, GL_INFO_LOG_LENGTH, &length);
-        if(length != 0) {
-            GLchar *info_log = new GLchar[length];
-            glGetShaderInfoLog(shader_id, length, &length, info_log);
-            LOG_ERROR("Error in shader: {}", info_log);
-            delete[] info_log;
-        } else {
-            LOG_ERROR("Huh? Compile error but no log?");
-        }
-        return -1;
-    }
-
-    //////////////////////////////////////////////////////////////////////
-
-    int gl_program::validate(GLuint param) const
-    {
-        GLint result;
-        glGetProgramiv(program_id, param, &result);
-        if(result) {
-            return 0;
-        }
-        GLsizei length;
-        glGetProgramiv(program_id, GL_INFO_LOG_LENGTH, &length);
-        if(length != 0) {
-            GLchar *info_log = new GLchar[length];
-            glGetProgramInfoLog(program_id, length, &length, info_log);
-            LOG_ERROR("Error in program: %s", info_log);
-            delete[] info_log;
-        } else if(param == GL_LINK_STATUS) {
-            LOG_ERROR("glLinkProgram failed: Can not link program.");
-        } else {
-            LOG_ERROR("glValidateProgram failed: Can not execute shader program.");
-        }
-        return -1;
-    }
-
-    //////////////////////////////////////////////////////////////////////
-
-    int gl_program::init(char const *const vertex_shader, char const *const fragment_shader)
-    {
-        vertex_shader_id = glCreateShader(GL_VERTEX_SHADER);
-        fragment_shader_id = glCreateShader(GL_FRAGMENT_SHADER);
-
-        glShaderSource(vertex_shader_id, 1, &vertex_shader, NULL);
-        glShaderSource(fragment_shader_id, 1, &fragment_shader, NULL);
-
-        glCompileShader(vertex_shader_id);
-        glCompileShader(fragment_shader_id);
-
-        int rc = check_shader(vertex_shader_id);
-        if(rc != 0) {
-            return rc;
-        }
-
-        rc = check_shader(fragment_shader_id);
-        if(rc != 0) {
-            return rc;
-        }
-
-        program_id = glCreateProgram();
-
-        glAttachShader(program_id, vertex_shader_id);
-        glAttachShader(program_id, fragment_shader_id);
-
-        glLinkProgram(program_id);
-        rc = validate(GL_LINK_STATUS);
-        if(rc != 0) {
-            return rc;
-        }
-        glValidateProgram(program_id);
-        rc = validate(GL_VALIDATE_STATUS);
-        if(rc != 0) {
-            return rc;
-        }
-        glUseProgram(program_id);
-
-        transform_location = glGetUniformLocation(program_id, "transform");
-        return on_init();
-    }
-
-    //////////////////////////////////////////////////////////////////////
-
-    int gl_solid_program::on_init()
-    {
-        color_location = glGetUniformLocation(program_id, "color");
-        return 0;
-    }
-
-    //////////////////////////////////////////////////////////////////////
-
-    void gl_solid_program::set_color(uint32_t color) const
-    {
-        float a = ((color >> 24) & 0xff) / 255.0f;
-        float b = ((color >> 16) & 0xff) / 255.0f;
-        float g = ((color >> 8) & 0xff) / 255.0f;
-        float r = ((color >> 0) & 0xff) / 255.0f;
-        glUniform4f(color_location, r, g, b, a);
-    }
-
-    //////////////////////////////////////////////////////////////////////
-
-    void gl_program::cleanup()
-    {
-        glDetachShader(program_id, vertex_shader_id);
-        glDetachShader(program_id, fragment_shader_id);
-
-        glDeleteShader(vertex_shader_id);
-        vertex_shader_id = 0;
-
-        glDeleteShader(fragment_shader_id);
-        fragment_shader_id = 0;
-
-        glDeleteProgram(program_id);
-        program_id = 0;
-    }
-
-    //////////////////////////////////////////////////////////////////////
-
-    int gl_vertex_array::init(gl_program &program, GLsizei vert_count, GLsizei index_count)
-    {
-        glGenBuffers(1, &vbo_id);
-        glGenBuffers(1, &ibo_id);
-
-        num_verts = vert_count;
-        num_indices = index_count;
-
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo_id);
-        glBindBuffer(GL_ARRAY_BUFFER, vbo_id);
-
-        glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(GLuint) * num_indices, nullptr, GL_DYNAMIC_DRAW);
-        glBufferData(GL_ARRAY_BUFFER, sizeof(gl_vertex_solid) * num_verts, nullptr, GL_DYNAMIC_DRAW);
-
-        return 0;
-    }
-
-    //////////////////////////////////////////////////////////////////////
-
-    int gl_vertex_array::activate() const
-    {
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo_id);
-        glBindBuffer(GL_ARRAY_BUFFER, vbo_id);
-        return 0;
-    }
-
-    //////////////////////////////////////////////////////////////////////
-
-    int gl_vertex_array_solid::init(gl_program &program, GLsizei vert_count, GLsizei index_count)
-    {
-        gl_vertex_array::init(program, vert_count, index_count);
-        position_location = glGetAttribLocation(program.program_id, "position");
-        return 0;
-    }
-
-    //////////////////////////////////////////////////////////////////////
-
-    int gl_vertex_array_solid::activate() const
-    {
-        gl_vertex_array::activate();
-        glEnableVertexAttribArray(position_location);
-        glVertexAttribPointer(position_location, 2, GL_FLOAT, GL_FALSE, sizeof(gl_vertex_solid), (void *)(offsetof(gl_vertex_solid, x)));
-        return 0;
-    }
-
-    //////////////////////////////////////////////////////////////////////
-
-    int gl_vertex_array_color::init(gl_program &program, GLsizei vert_count, GLsizei index_count)
-    {
-        gl_vertex_array::init(program, vert_count, index_count);
-        position_location = glGetAttribLocation(program.program_id, "position");
-        color_location = glGetAttribLocation(program.program_id, "color");
-        return 0;
-    }
-
-    //////////////////////////////////////////////////////////////////////
-
-    int gl_vertex_array_color::activate() const
-    {
-        gl_vertex_array::activate();
-        glEnableVertexAttribArray(position_location);
-        glEnableVertexAttribArray(color_location);
-        glVertexAttribPointer(position_location, 2, GL_FLOAT, GL_FALSE, sizeof(gl_vertex_color), (void *)(offsetof(gl_vertex_color, x)));
-        glVertexAttribPointer(color_location, 4, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(gl_vertex_color), (void *)(offsetof(gl_vertex_color, color)));
-        return 0;
-    }
-
-    //////////////////////////////////////////////////////////////////////
-
-    void gl_vertex_array::cleanup()
-    {
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
-        glBindBuffer(GL_ARRAY_BUFFER, 0);
-
-        GLuint buffers[] = { vbo_id, ibo_id };
-        glDeleteBuffers(2, buffers);
-    }
-
     //////////////////////////////////////////////////////////////////////
 
     void gl_window::zoom_to_rect(rect const &zoom_rect, double border_ratio)
@@ -642,10 +290,10 @@ namespace gerber_3d
 
             case mouse_drag_maybe_select: {
                 vec2d pos = pos_from_lparam(lParam);
-                if(pos.subtract(drag_mouse_start_pos).length() > drag_offset_start_distance) {
+                if(pos.subtract(drag_mouse_start_pos).length() > drag_select_offset_start_distance) {
                     mouse_drag = mouse_drag_select;
-                    //entities_clicked.clear();
-                    //highlight_entity = false;
+                    // entities_clicked.clear();
+                    // highlight_entity = false;
                     drag_mouse_cur_pos = pos;
                     drag_rect = rect{ drag_mouse_start_pos, drag_mouse_cur_pos };
                     // select_entities(drag_rect, (GetKeyState(VK_SHIFT) & 0x8000) == 0);
@@ -708,6 +356,8 @@ namespace gerber_3d
                     gl_drawer *drawer = new gl_drawer();
                     drawer->program = &solid_program;
                     drawer->set_gerber(g);
+                    drawer->layer_color = layer_colors[layers.size() % gerber_util::array_length(layer_colors)];
+                    drawer->set_alpha(layer_alpha);
                     layers.push_back(drawer);
                     zoom_to_rect(g->image.info.extent);
                 }
@@ -883,13 +533,19 @@ namespace gerber_3d
         wglMakeCurrent(window_dc, render_context);
         wglSwapIntervalEXT(1);
 
+        LOG_VERBOSE("GL Version: {}", (char const *)glGetString(GL_VERSION));
+        LOG_VERBOSE("GL Vendor: {}", (char const *)glGetString(GL_VENDOR));
+        LOG_VERBOSE("GL Renderer: {}", (char const *)glGetString(GL_RENDERER));
+        LOG_VERBOSE("GL Shader language version: {}", (char const *)glGetString(GL_SHADING_LANGUAGE_VERSION));
+        LOG_VERBOSE("GLU Version: {}", (char const *)gluGetString(GLU_VERSION));
+
         // init ImGui
 
         IMGUI_CHECKVERSION();
         ImGui::CreateContext();
         ImGuiIO &io = ImGui::GetIO();
-        io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;    // Enable Keyboard Controls
-        io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;     // Enable Gamepad Controls
+        io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+        io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
 
         ImGui::StyleColorsDark();
 
@@ -900,21 +556,10 @@ namespace gerber_3d
 
         // setup shader
 
-        if(solid_program.init(solid_vertex_shader_source, fragment_shader_source) != 0) {
+        if(solid_program.init() != 0) {
             LOG_ERROR("program.init failed - exiting");
             return -13;
         }
-
-#if defined(DRAW_TEST)
-        if(verts.init(program, (GLsizei)test_vertices.size(), (GLsizei)test_indices.size()) != 0) {
-            LOG_ERROR("verts.init failed - exiting");
-            return -14;
-        }
-#endif
-
-        // really done
-
-        ShowWindow(hwnd, SW_SHOW);
 
         return 0;
     }
@@ -942,6 +587,11 @@ namespace gerber_3d
         }
         ImGuiIO &io = ImGui::GetIO();
         ImGui::Text("(%.1f FPS (%.3f ms)", io.Framerate, 1000.0f / io.Framerate);
+        if(ImGui::SliderInt("Alpha", &layer_alpha, 1, 255)) {
+            if(!layers.empty()) {
+                layers.front()->set_alpha(layer_alpha);
+            }
+        }
         ImGui::End();
         ImGui::Render();
     }
@@ -976,28 +626,12 @@ namespace gerber_3d
 
         glUniformMatrix4fv(solid_program.transform_location, 1, true, transform_matrix);
 
-        glClearColor(0.1f, 0.2f, 0.5f, 0);
+        glClearColor(0.1f, 0.1f, 0.2f, 0);
         glClear(GL_COLOR_BUFFER_BIT);
 
         for(auto layer : layers) {
             layer->draw();
         }
-
-#if defined(DRAW_TEST)
-        verts.activate(program);
-        program.set_color(0xffffff00);
-        using vert_type = decltype(test_vertices)::value_type;
-        using index_type = decltype(test_indices)::value_type;
-        vert_type *v = (vert_type *)glMapBuffer(GL_ARRAY_BUFFER, GL_WRITE_ONLY);
-        index_type *i = (index_type *)glMapBuffer(GL_ELEMENT_ARRAY_BUFFER, GL_WRITE_ONLY);
-        memcpy(v, test_vertices.data(), test_vertices.size() * sizeof(vert_type));
-        memcpy(i, test_indices.data(), test_indices.size() * sizeof(index_type));
-        glUnmapBuffer(GL_ELEMENT_ARRAY_BUFFER);
-        glUnmapBuffer(GL_ARRAY_BUFFER);
-        glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-
-        glDrawElements(GL_TRIANGLES, (GLsizei)test_indices.size(), GL_UNSIGNED_INT, (GLvoid *)0);
-#endif
 
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
@@ -1029,6 +663,5 @@ namespace gerber_3d
         }
         return std::string{};
     }
-
 
 }    // namespace gerber_3d

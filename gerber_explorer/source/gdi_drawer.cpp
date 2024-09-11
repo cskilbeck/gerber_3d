@@ -37,7 +37,7 @@ namespace
 
     Color const debug_color{ 255, 0, 0, 0 };
 
-    double const drag_offset_start_distance = 16;
+    double const drag_select_offset_start_distance = 16;
 
     //////////////////////////////////////////////////////////////////////
 
@@ -758,7 +758,7 @@ namespace gerber_3d
 
             case mouse_drag_maybe_select: {
                 vec2d pos = pos_from_lparam(lParam);
-                if(pos.subtract(drag_mouse_start_pos).length() > drag_offset_start_distance) {
+                if(pos.subtract(drag_mouse_start_pos).length() > drag_select_offset_start_distance) {
                     mouse_drag = mouse_drag_select;
                     entities_clicked.clear();
                     highlight_entity = false;
