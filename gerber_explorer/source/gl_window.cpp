@@ -41,7 +41,7 @@ namespace
 
     uint32_t layer_colors[] = { color::red, color::green, color::dark_cyan, color::lime_green, color::antique_white, color::corn_flower_blue, color::gold };
 
-    int layer_alpha = 128;
+    uint32_t layer_color = color::red;
 
     //////////////////////////////////////////////////////////////////////
     // make a rectangle have a certain aspect ratio by shrinking or expanding it
@@ -357,7 +357,6 @@ namespace gerber_3d
                     drawer->program = &solid_program;
                     drawer->set_gerber(g);
                     drawer->layer_color = layer_colors[layers.size() % gerber_util::array_length(layer_colors)];
-                    drawer->set_alpha(layer_alpha);
                     layers.push_back(drawer);
                     zoom_to_rect(g->image.info.extent);
                 }
@@ -587,9 +586,19 @@ namespace gerber_3d
         }
         ImGuiIO &io = ImGui::GetIO();
         ImGui::Text("(%.1f FPS (%.3f ms)", io.Framerate, 1000.0f / io.Framerate);
-        if(ImGui::SliderInt("Alpha", &layer_alpha, 1, 255)) {
-            if(!layers.empty()) {
-                layers.front()->set_alpha(layer_alpha);
+        if(!layers.empty()) {
+            static bool color_picker_active = false;
+            ImVec4 layer_color_f;
+            color::to_floats(layers.front()->layer_color, &layer_color_f.x);
+            if(ImGui::ColorButton("Color", layer_color_f, ImGuiColorEditFlags_DisplayHex | ImGuiColorEditFlags_DisplayRGB)) {
+                color_picker_active = !color_picker_active;
+            }
+            if(color_picker_active) {
+                if(ImGui::ColorPicker4("Color", &layer_color_f.x,
+                                       ImGuiColorEditFlags_DisplayHex | ImGuiColorEditFlags_DisplayRGB | ImGuiColorEditFlags_AlphaBar |
+                                           ImGuiColorEditFlags_AlphaPreview)) {
+                    layers.front()->layer_color = color::from_floats(&layer_color_f.x);
+                }
             }
         }
         ImGui::End();

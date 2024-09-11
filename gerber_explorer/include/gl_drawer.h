@@ -26,8 +26,6 @@ namespace gerber_3d
 
         void draw();
 
-        void set_alpha(int alpha);
-
         uint32_t layer_color{ 0xff00ff00 };
 
         gerber_lib::gerber *gerber_file;

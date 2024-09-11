@@ -4,6 +4,23 @@
 
 namespace color
 {
+    inline uint32_t from_floats(float f[4])
+    {
+        uint32_t red = (int)(f[0] * 255.0f) & 0xff;
+        uint32_t green = (int)(f[1] * 255.0f) & 0xff;
+        uint32_t blue = (int)(f[2] * 255.0f) & 0xff;
+        uint32_t alpha = (int)(f[3] * 255.0f) & 0xff;
+        return (alpha << 24) | (blue << 16) | (green << 8) | red;
+    }
+
+    inline void to_floats(uint32_t color, float f[4])
+    {
+        f[0] = ((color >> 0) & 0xff) / 255.0f;
+        f[1] = ((color >> 8) & 0xff) / 255.0f;
+        f[2] = ((color >> 16) & 0xff) / 255.0f;
+        f[3] = ((color >> 24) & 0xff) / 255.0f;
+    }
+
     enum : uint32_t
     {
         black = 0xff000000,

@@ -41,13 +41,6 @@ namespace gerber_3d
 {
     //////////////////////////////////////////////////////////////////////
 
-    void gl_drawer::set_alpha(int alpha)
-    {
-        layer_color = (layer_color & 0xffffff) | (alpha << 24);
-    }
-
-    //////////////////////////////////////////////////////////////////////
-
     void gl_drawer::set_gerber(gerber *g)
     {
         gerber_file = g;
