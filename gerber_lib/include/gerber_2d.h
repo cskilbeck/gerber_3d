@@ -190,6 +190,10 @@ namespace gerber_lib
 
             //////////////////////////////////////////////////////////////////////
 
+            rect union_with(rect const &o) const;
+
+            //////////////////////////////////////////////////////////////////////
+
             double aspect_ratio() const
             {
                 double w = width();

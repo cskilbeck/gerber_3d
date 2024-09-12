@@ -2,13 +2,13 @@
 
 #include "gerber_log.h"
 #include "gerber_lib.h"
+#include "gerber_2d.h"
 #include "gerber_util.h"
+#include "gerber_settings.h"
 #include "fonts.h"
 
 #include <vector>
-
-#include "gl_window.h"
-#include "gl_drawer.h"
+#include <thread>
 
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
@@ -26,7 +26,7 @@
 
 #include "gl_base.h"
 #include "gl_matrix.h"
-#include "gl_window.h"
+#include "gl_drawer.h"
 #include "gl_functions.h"
 
 #include "imgui.h"
@@ -37,10 +37,16 @@ namespace
 {
     //////////////////////////////////////////////////////////////////////
 
+    auto constexpr WM_SHOW_OPEN_FILE_DIALOG = WM_USER;
+    auto constexpr WM_GERBER_WAS_LOADED = WM_USER + 1;
+    auto constexpr WM_FIT_TO_WINDOW = WM_USER + 2;
+
     using vec2d = gerber_lib::gerber_2d::vec2d;
 
     using namespace gerber_lib;
     using namespace gerber_3d;
+
+    long long const zoom_lerp_time_ms = 700;
 
     double const drag_select_offset_start_distance = 16;
 
@@ -101,6 +107,20 @@ namespace
 
     //////////////////////////////////////////////////////////////////////
 
+    bool is_mouse_message(UINT message)
+    {
+        return message >= WM_MOUSEFIRST && message <= WM_MOUSELAST;
+    }
+
+    //////////////////////////////////////////////////////////////////////
+
+    bool is_keyboard_message(UINT message)
+    {
+        return message >= WM_KEYFIRST && message <= WM_KEYLAST;
+    }
+
+    //////////////////////////////////////////////////////////////////////
+
     vec2d pos_from_lparam(LPARAM lParam)
     {
         return vec2d{ (double)GET_X_LPARAM(lParam), (double)GET_Y_LPARAM(lParam) };
@@ -112,10 +132,120 @@ namespace gerber_3d
 {
     //////////////////////////////////////////////////////////////////////
 
+    void gl_window::show_3d_view()
+    {
+        if(layers.empty()) {
+            return;
+        }
+
+        if(occ.vout.hwnd == nullptr) {
+            occ.show_progress = true;
+            occ.create_window(100, 100, 700, 700);
+        }
+
+        // std::thread([&](gerber *g) {
+
+        //    Sleep(1000);
+        //    //occ.set_gerber(g);
+        //    //PostMessageA(occ.vout.hwnd, WM_USER, 0, 0);
+
+        //}, layers.front()->layer->gerber_file).detach();
+    }
+
+    //////////////////////////////////////////////////////////////////////
+
+    void gl_window::save_settings()
+    {
+        using namespace gerber_util;
+
+        clear_settings();
+
+        save_bool("show_axes", show_axes);
+        save_bool("show_extent", show_extent);
+
+        int index = 0;
+        for(auto const layer : layers) {
+            save_string(std::format("file_{}", index), layer->layer->gerber_file->filename);
+            index += 1;
+            if(index > 50) {
+                break;
+            }
+        }
+    }
+
+    //////////////////////////////////////////////////////////////////////
+
+    void gl_window::load_settings()
+    {
+        using namespace gerber_util;
+
+        load_bool("show_axes", show_axes);
+        load_bool("show_extent", show_extent);
+
+        std::vector<std::string> names;
+        for(int index = 0; index < 50; ++index) {
+            std::string filename;
+            if(!load_string(std::format("file_{}", index), filename)) {
+                break;
+            }
+            names.push_back(filename);
+        }
+        load_gerber_files(names);
+    }
+
+    //////////////////////////////////////////////////////////////////////
+    // must pass the names by value here
+
+    void gl_window::load_gerber_files(std::vector<std::string> filenames)
+    {
+        std::thread([=]() {
+            std::vector<std::thread *> threads;
+            std::vector<gl_drawer *> drawers;
+            drawers.resize(50);
+            int index = 0;
+            for(auto const s : filenames) {
+                LOG_DEBUG("LOADING {}", s);
+                threads.push_back(new std::thread(
+                    [&](std::string filename, int index) {
+                        gerber *g = new gerber();
+                        if(g->parse_file(filename.c_str()) == ok) {
+                            gl_drawer *drawer = new gl_drawer();
+                            drawers[index] = drawer;
+                            drawer->program = &solid_program;
+                            drawer->set_gerber(g);
+                        }
+                    },
+                    s, index));
+                ++index;
+            }
+            LOG_DEBUG("{} threads", threads.size());
+            int id = 0;
+            for(auto thread : threads) {
+                LOG_DEBUG("Joining thread {}", id++);
+                thread->join();
+                delete thread;
+            }
+            threads.clear();
+            for(int i = 0; i < index; ++i) {
+                gl_drawer *d = drawers[i];
+                PostMessage(hwnd, WM_GERBER_WAS_LOADED, 0, (LPARAM)d);
+            }
+            PostMessage(hwnd, WM_FIT_TO_WINDOW, 0, 0);
+        }).detach();
+    }
+
+    //////////////////////////////////////////////////////////////////////
+
     void gl_window::fit_to_window()
     {
         if(selected_layer != nullptr) {
             zoom_to_rect(selected_layer->layer->gerber_file->image.info.extent);
+        } else {
+            rect all{ { FLT_MAX, FLT_MAX }, { -FLT_MAX, -FLT_MAX } };
+            for(auto layer : layers) {
+                all = all.union_with(layer->layer->gerber_file->image.info.extent);
+            }
+            zoom_to_rect(all);
         }
     }
 
@@ -123,10 +253,16 @@ namespace gerber_3d
 
     void gl_window::zoom_to_rect(rect const &zoom_rect, double border_ratio)
     {
+        if(window_rect.width() == 0 || window_rect.height() == 0) {
+            return;
+        }
         rect new_rect = correct_aspect_ratio(window_rect.aspect_ratio(), zoom_rect, aspect_expand);
         vec2d mid = new_rect.mid_point();
         vec2d siz = new_rect.size().scale(border_ratio / 2);
-        view_rect = { mid.subtract(siz), mid.add(siz) };
+        target_view_rect = { mid.subtract(siz), mid.add(siz) };
+        source_view_rect = view_rect;
+        target_view_time = std::chrono::high_resolution_clock::now() + std::chrono::milliseconds(zoom_lerp_time_ms);
+        zoom_anim = true;
     }
 
     //////////////////////////////////////////////////////////////////////
@@ -158,12 +294,44 @@ namespace gerber_3d
 
     //////////////////////////////////////////////////////////////////////
 
+    vec2d gl_window::window_pos_from_world_pos(vec2d const &p) const
+    {
+        vec2d scale = window_size.divide(view_rect.size());
+        vec2d pos = p.subtract(view_rect.min_pos).multiply(scale);
+        return { pos.x, window_size.y - pos.y };
+    }
+
+    //////////////////////////////////////////////////////////////////////
+
+    void gl_window::select_layer(gerber_layer *l)
+    {
+        if(selected_layer != nullptr) {
+            selected_layer->selected = false;
+        }
+        if(l != nullptr) {
+            l->selected = true;
+        }
+        selected_layer = l;
+    }
+
+    //////////////////////////////////////////////////////////////////////
+
     LRESULT CALLBACK gl_window::wnd_proc_proxy(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
     {
         extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
         if(ImGui_ImplWin32_WndProcHandler(hWnd, message, wParam, lParam)) {
             return true;
+        }
+
+        if(ImGui::GetCurrentContext() != nullptr) {
+            ImGuiIO &io = ImGui::GetIO();
+            if(io.WantCaptureMouse && is_mouse_message(message)) {
+                return 0;
+            }
+            if(io.WantCaptureKeyboard && is_keyboard_message(message)) {
+                return 0;
+            }
         }
 
         if(message == WM_CREATE) {
@@ -190,15 +358,32 @@ namespace gerber_3d
             ValidateRect(hwnd, nullptr);
         } break;
 
+        case WM_SHOWWINDOW:
+            LOG_DEBUG("SHOWWINDOW({})", wParam);
+            break;
+
         case WM_SIZE: {
-            RECT rc;
-            GetClientRect(hwnd, &rc);
-            vec2d new_window_size = { (double)rc.right, (double)rc.bottom };
-            vec2d scale_factor = new_window_size.divide(window_size);
-            window_size = new_window_size;
-            window_rect = { { 0, 0 }, window_size };
-            vec2d new_view_size = view_rect.size().multiply(scale_factor);
-            view_rect.max_pos = view_rect.min_pos.add(new_view_size);
+            if(IsWindowVisible(hwnd)) {
+                RECT rc;
+                GetClientRect(hwnd, &rc);
+                vec2d new_window_size = { (double)rc.right, (double)rc.bottom };
+                LOG_DEBUG("New window size: {}", new_window_size);
+                if(window_size.x == 0 || window_size.y == 0) {
+                    window_size = new_window_size;
+                    window_rect = { { 0, 0 }, window_size };
+                    view_rect = window_rect.offset(window_size.scale(-0.5));
+                } else {
+                    vec2d scale_factor = new_window_size.divide(window_size);
+                    window_size = new_window_size;
+                    window_rect = { { 0, 0 }, window_size };
+                    vec2d new_view_size = view_rect.size().multiply(scale_factor);
+                    view_rect.max_pos = view_rect.min_pos.add(new_view_size);
+                }
+                if(!window_size_valid && !layers.empty()) {
+                    zoom_to_rect(layers.front()->layer->gerber_file->image.info.extent);
+                }
+                window_size_valid = true;
+            }
             ValidateRect(hwnd, nullptr);
         } break;
 
@@ -215,12 +400,14 @@ namespace gerber_3d
             vec2d mouse_pos = pos_from_lparam(lParam);
             if((GetKeyState(VK_CONTROL) & 0x8000) != 0) {
                 mouse_drag = mouse_drag_zoom_select;
+                zoom_anim = false;
                 drag_mouse_start_pos = mouse_pos;
                 drag_rect = {};
+                drag_rect_raw = {};
                 SetCapture(hwnd);
             } else {
-                // on_left_click(mouse_pos, (GetKeyState(VK_SHIFT) & 0x8000) != 0);
                 mouse_drag = mouse_drag_maybe_select;
+                zoom_anim = false;
                 drag_rect = {};
                 drag_mouse_start_pos = mouse_pos;
                 SetCapture(hwnd);
@@ -235,7 +422,7 @@ namespace gerber_3d
                 vec2d mx = drag_rect.max_pos;
                 rect d = rect{ mn, mx }.normalize();
                 if(d.width() > 1 && d.height() > 1) {
-                    view_rect = { world_pos_from_window_pos(vec2d{ mn.x, mx.y }), world_pos_from_window_pos(vec2d{ mx.x, mn.y }) };
+                    zoom_to_rect({ world_pos_from_window_pos(vec2d{ mn.x, mx.y }), world_pos_from_window_pos(vec2d{ mx.x, mn.y }) });
                 }
             }
             mouse_drag = mouse_drag_none;
@@ -246,6 +433,7 @@ namespace gerber_3d
 
         case WM_MBUTTONDOWN:
             mouse_drag = mouse_drag_zoom;
+            zoom_anim = false;
             drag_mouse_cur_pos = pos_from_lparam(lParam);
             drag_mouse_start_pos = drag_mouse_cur_pos;
             SetCapture(hwnd);
@@ -262,6 +450,7 @@ namespace gerber_3d
 
         case WM_RBUTTONDOWN:
             mouse_drag = mouse_drag_pan;
+            zoom_anim = false;
             drag_mouse_cur_pos = pos_from_lparam(lParam);
             SetCapture(hwnd);
             break;
@@ -284,6 +473,7 @@ namespace gerber_3d
                 vec2d new_mouse_pos = world_pos_from_window_pos(mouse_pos);
                 vec2d old_mouse_pos = world_pos_from_window_pos(drag_mouse_cur_pos);
                 view_rect = view_rect.offset(new_mouse_pos.subtract(old_mouse_pos).negate());
+                zoom_anim = false;
                 drag_mouse_cur_pos = mouse_pos;
             } break;
 
@@ -337,6 +527,10 @@ namespace gerber_3d
                 DestroyWindow(hwnd);
                 break;
 
+            case '3':
+                show_3d_view();
+                break;
+
             default:
                 break;
             }
@@ -347,6 +541,7 @@ namespace gerber_3d
             break;
 
         case WM_DESTROY:
+            save_settings();
             ImGui::SaveIniSettingsToDisk("ImGui.ini");
             wglMakeCurrent(window_dc, NULL);
             wglDeleteContext(render_context);
@@ -362,29 +557,28 @@ namespace gerber_3d
             ValidateRect(hwnd, nullptr);
             break;
 
-        case WM_USER: {
+        case WM_SHOW_OPEN_FILE_DIALOG: {
             std::vector<std::string> filenames;
             if(get_open_filenames(filenames)) {
-                for(auto const &filename : filenames) {
-                    gerber *g = new gerber();
-                    if(g->parse_file(filename.c_str()) == ok) {
-                        gl_drawer *drawer = new gl_drawer();
-                        drawer->program = &solid_program;
-                        drawer->set_gerber(g);
-
-                        gerber_layer *layer = new gerber_layer();
-                        layer->layer = drawer;
-                        layer->fill_color = layer_colors[layers.size() % gerber_util::array_length(layer_colors)];
-                        layer->clear_color = color::black;
-                        layer->outline_color = color::white & 0x80ffffff;
-                        layer->outline = false;
-                        layer->filename = std::filesystem::path(filename).filename().string();
-                        layers.push_back(layer);
-
-                        zoom_to_rect(g->image.info.extent);
-                    }
-                }
+                load_gerber_files(filenames);
             }
+        } break;
+
+        case WM_GERBER_WAS_LOADED: {
+            gl_drawer *drawer = (gl_drawer *)lParam;
+            drawer->on_finished_loading();
+            gerber_layer *layer = new gerber_layer();
+            layer->layer = drawer;
+            layer->fill_color = layer_colors[layers.size() % gerber_util::array_length(layer_colors)];
+            layer->clear_color = color::black;
+            layer->outline_color = color::white & 0x80ffffff;
+            layer->outline = false;
+            layer->filename = std::filesystem::path(drawer->gerber_file->filename).filename().string();
+            layers.push_back(layer);
+        } break;
+
+        case WM_FIT_TO_WINDOW: {
+            fit_to_window();
         } break;
 
         default:
@@ -584,9 +778,18 @@ namespace gerber_3d
         // setup shader
 
         if(solid_program.init() != 0) {
-            LOG_ERROR("program.init failed - exiting");
+            LOG_ERROR("solid_program.init failed - exiting");
             return -13;
         }
+
+        if(color_program.init() != 0) {
+            LOG_ERROR("color_program.init failed - exiting");
+            return -14;
+        }
+
+        overlay.init(color_program);
+
+        load_settings();
 
         return 0;
     }
@@ -597,6 +800,10 @@ namespace gerber_3d
     {
         static bool show_stats{ false };
 
+        auto color_edit_flags = ImGuiColorEditFlags_AlphaBar | ImGuiColorEditFlags_AlphaPreview | ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoTooltip;
+
+        bool close_all = false;
+
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplWin32_NewFrame();
         ImGui::NewFrame();
@@ -604,9 +811,14 @@ namespace gerber_3d
         if(ImGui::BeginMenuBar()) {
             if(ImGui::BeginMenu("File")) {
                 if(ImGui::MenuItem("Open", nullptr, nullptr)) {
-                    PostMessage(hwnd, WM_USER, 0, 0);
+                    PostMessage(hwnd, WM_SHOW_OPEN_FILE_DIALOG, 0, 0);
                 }
                 ImGui::MenuItem("Stats", nullptr, &show_stats);
+                ImGui::MenuItem("Options", nullptr, &show_options);
+                if(ImGui::MenuItem("Close all", nullptr, nullptr)) {
+                    close_all = true;
+                }
+                ImGui::Separator();
                 if(ImGui::MenuItem("Exit", "Esc", nullptr)) {
                     DestroyWindow(hwnd);
                     return;
@@ -614,9 +826,10 @@ namespace gerber_3d
                 ImGui::EndMenu();
             }
             if(ImGui::BeginMenu("View")) {
-                if(ImGui::MenuItem("Fit to window", nullptr, nullptr, selected_layer != nullptr)) {
+                if(ImGui::MenuItem("Fit to window", nullptr, nullptr, !layers.empty())) {
                     fit_to_window();
                 }
+                ImGui::MenuItem("Show Axes", nullptr, &show_axes);
                 ImGui::EndMenu();
             }
             ImGui::EndMenuBar();
@@ -685,7 +898,6 @@ namespace gerber_3d
                 color::to_floats(layer->fill_color, &fill_color_f.x);
                 color::to_floats(layer->clear_color, &clear_color_f.x);
                 color::to_floats(layer->outline_color, &outline_color_f.x);
-                auto flags = ImGuiColorEditFlags_AlphaBar | ImGuiColorEditFlags_AlphaPreview | ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoTooltip;
                 if(ImGui::Checkbox("Fill", &layer->fill)) {
                     if(!layer->fill && !layer->outline) {
                         layer->outline = true;
@@ -693,11 +905,11 @@ namespace gerber_3d
                 }
                 if(layer->fill) {
                     ImGui::SameLine();
-                    if(ImGui::ColorEdit4("Fill", &fill_color_f.x, flags)) {
+                    if(ImGui::ColorEdit4("Fill", &fill_color_f.x, color_edit_flags)) {
                         layer->fill_color = color::from_floats(&fill_color_f.x);
                     }
                     ImGui::SameLine();
-                    if(ImGui::ColorEdit4("Clear", &clear_color_f.x, flags)) {
+                    if(ImGui::ColorEdit4("Clear", &clear_color_f.x, color_edit_flags)) {
                         layer->clear_color = color::from_floats(&clear_color_f.x);
                     }
                 }
@@ -708,7 +920,7 @@ namespace gerber_3d
                 }
                 if(layer->outline) {
                     ImGui::SameLine();
-                    if(ImGui::ColorEdit4("", &outline_color_f.x, flags)) {
+                    if(ImGui::ColorEdit4("", &outline_color_f.x, color_edit_flags)) {
                         layer->outline_color = color::from_floats(&outline_color_f.x);
                     }
                 }
@@ -716,17 +928,33 @@ namespace gerber_3d
             }
             ImGui::PopID();
             if(close) {
-                layers.erase(layers.begin() + i);
-                selected_layer = nullptr;
-                for(auto l : layers) {
-                    if(l->selected) {
-                        selected_layer = l;
-                        break;
-                    }
+                gerber_layer *l = layers[i];
+                if(l->selected) {
+                    select_layer(nullptr);
                 }
+                layers.erase(layers.begin() + i);
             }
         }
+
         ImGui::End();
+
+        if(show_options) {
+            ImGui::Begin("Options", &show_options);
+            ImVec4 color_f;
+            color::to_floats(axes_color, &color_f.x);
+            ImGui::Checkbox("Show axes", &show_axes);
+            ImGui::SameLine();
+            if(ImGui::ColorEdit4("Axes", &color_f.x, color_edit_flags)) {
+                axes_color = color::from_floats(&color_f.x);
+            }
+            ImGui::Checkbox("Show extent", &show_extent);
+            color::to_floats(extent_color, &color_f.x);
+            ImGui::SameLine();
+            if(ImGui::ColorEdit4("Extents", &color_f.x, color_edit_flags)) {
+                extent_color = color::from_floats(&color_f.x);
+            }
+            ImGui::End();
+        }
 
         if(show_stats) {
             ImGui::Begin("Stats");
@@ -737,6 +965,49 @@ namespace gerber_3d
             ImGui::End();
         }
         ImGui::Render();
+
+        if(close_all) {
+            for(auto l : layers) {
+                delete l;
+            }
+            layers.clear();
+        }
+    }
+
+    //////////////////////////////////////////////////////////////////////
+
+    void gl_window::update_view_rect()
+    {
+        LOG_CONTEXT("zoomer", info);
+
+        if(zoom_anim) {
+
+            auto lerp = [](double d) {
+                double p = 10;
+                double x = d;
+                double x2 = pow(x, p - 1);
+                double x1 = x2 * x;    // pow(x, p)
+                return 1 - (p * x2 - (p - 1) * x1);
+            };
+
+            auto now = std::chrono::high_resolution_clock::now();
+            auto remaining_ms = std::chrono::duration_cast<std::chrono::milliseconds>(target_view_time - now).count();
+            if(remaining_ms < 1) {
+                remaining_ms = 0;
+            }
+            double t = (double)remaining_ms / (double)zoom_lerp_time_ms;
+            double d = lerp(t);
+            vec2d dmin = target_view_rect.min_pos.subtract(source_view_rect.min_pos).scale(d);
+            vec2d dmax = target_view_rect.max_pos.subtract(source_view_rect.max_pos).scale(d);
+            view_rect = { source_view_rect.min_pos.add(dmin), source_view_rect.max_pos.add(dmax) };
+            vec2d wv = window_pos_from_world_pos(view_rect.min_pos);
+            vec2d tv = window_pos_from_world_pos(target_view_rect.min_pos);
+            if(wv.subtract(tv).length() <= 1) {
+                LOG_DEBUG("View zoom complete");
+                view_rect = target_view_rect;
+                zoom_anim = false;
+            }
+        }
     }
 
     //////////////////////////////////////////////////////////////////////
@@ -751,6 +1022,8 @@ namespace gerber_3d
             return;
         }
 
+        update_view_rect();
+
         // setup gl viewport and transform matrix
 
         RECT rc;
@@ -758,6 +1031,11 @@ namespace gerber_3d
         window_width = rc.right;
         window_height = rc.bottom;
         glViewport(0, 0, window_width, window_height);
+
+        if(render_target.width != window_width || render_target.height != window_height) {
+            render_target.cleanup();
+            render_target.init(window_width, window_height);
+        }
 
         gl_matrix projection_matrix;
         gl_matrix view_matrix;
@@ -767,10 +1045,12 @@ namespace gerber_3d
         make_world_to_window_transform(window_rect, view_rect, view_matrix);
         matrix_multiply(projection_matrix, view_matrix, transform_matrix);
 
-        glUniformMatrix4fv(solid_program.transform_location, 1, true, transform_matrix);
+        solid_program.use();
 
-        glClearColor(0.1f, 0.1f, 0.2f, 0);
-        glClear(GL_COLOR_BUFFER_BIT);
+        GL_CHECK(glUniformMatrix4fv(solid_program.transform_location, 1, true, transform_matrix));
+
+        GL_CHECK(glClearColor(0.1f, 0.1f, 0.2f, 1.0));
+        GL_CHECK(glClear(GL_COLOR_BUFFER_BIT));
 
         for(size_t n = layers.size(); n != 0;) {
             gerber_layer *layer = layers[--n];
@@ -778,6 +1058,37 @@ namespace gerber_3d
                 layer->layer->draw(layer->fill, layer->fill_color, layer->clear_color, layer->outline, layer->outline_color);
             }
         }
+
+        color_program.use();
+
+        make_ortho(projection_matrix, window_width, -window_height);
+        make_translate(view_matrix, 0, (float)-window_size.y);
+        matrix_multiply(projection_matrix, view_matrix, transform_matrix);
+
+        GL_CHECK(glUniformMatrix4fv(color_program.transform_location, 1, true, transform_matrix));
+
+        overlay.reset();
+        if(mouse_drag == mouse_drag_zoom_select) {
+            overlay.add_rect(drag_rect, 0x80ffff00);
+            overlay.add_rect(drag_rect_raw, 0x800000ff);
+            overlay.add_outline_rect(drag_rect_raw, 0xffffffff);
+        }
+
+        vec2d origin = window_pos_from_world_pos({ 0, 0 });
+
+        if(show_axes) {    // show_axes
+            overlay.lines();
+            overlay.add_line({ 0, origin.y }, { window_size.x, origin.y }, axes_color);
+            overlay.add_line({ origin.x, 0 }, { origin.x, window_size.y }, axes_color);
+        }
+
+        if(show_extent && selected_layer != nullptr) {
+            rect const &extent = selected_layer->layer->gerber_file->image.info.extent;
+            rect s{ window_pos_from_world_pos(extent.min_pos), window_pos_from_world_pos(extent.max_pos) };
+            overlay.add_outline_rect(s, extent_color);
+        }
+
+        overlay.draw();
 
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
@@ -789,7 +1100,7 @@ namespace gerber_3d
     bool gl_window::get_open_filenames(std::vector<std::string> &filenames)
     {
         // open a file name
-        char filename[MAX_PATH] = {};
+        char filename[MAX_PATH * 20] = {};
         OPENFILENAME ofn{ 0 };
         ZeroMemory(&ofn, sizeof(ofn));
         ofn.lStructSize = sizeof(ofn);

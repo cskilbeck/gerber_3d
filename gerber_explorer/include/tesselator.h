@@ -22,7 +22,7 @@ struct tesselator_draw_call
 
 struct tesselator
 {
-    LOG_CONTEXT("tesselator", debug);
+    LOG_CONTEXT("tesselator", info);
 
     enum draw_flags : uint32_t
     {

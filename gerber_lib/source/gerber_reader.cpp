@@ -5,7 +5,7 @@
 #include "gerber_error.h"
 #include "gerber_reader.h"
 
-LOG_CONTEXT("line_reader", debug);
+LOG_CONTEXT("line_reader", info);
 
 namespace gerber_lib
 {

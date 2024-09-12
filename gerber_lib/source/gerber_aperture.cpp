@@ -10,7 +10,7 @@
 #include "gerber_state.h"
 #include "gerber_aperture.h"
 
-LOG_CONTEXT("aperture", debug);
+LOG_CONTEXT("aperture", info);
 
 namespace
 {

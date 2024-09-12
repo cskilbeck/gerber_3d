@@ -4,6 +4,8 @@
 
 namespace gerber_util
 {
+    void clear_settings();
+
     bool load_string(std::string const &name, std::string &value);
     bool load_int(std::string const &name, int &value);
     bool load_double(std::string const &name, double &value);

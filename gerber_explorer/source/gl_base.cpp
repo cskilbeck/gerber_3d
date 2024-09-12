@@ -2,6 +2,7 @@
 
 #include "gerber_log.h"
 #include "gerber_lib.h"
+#include "gerber_2d.h"
 #include "gerber_util.h"
 
 #include "gl_window.h"
@@ -15,6 +16,7 @@
 #include <Commdlg.h>
 
 #include <gl/GL.h>
+#include <gl/GLU.h>
 
 #include "Wglext.h"
 #include "glcorearb.h"
@@ -30,6 +32,7 @@
 #pragma comment(lib, "opengl32.lib")
 #pragma comment(lib, "glu32.lib")
 
+LOG_CONTEXT("gl_base", debug);
 
 namespace gerber_3d
 {
@@ -93,15 +96,15 @@ namespace gerber_3d
     int gl_program::check_shader(GLuint shader_id) const
     {
         GLint result;
-        glGetShaderiv(shader_id, GL_COMPILE_STATUS, &result);
+        GL_CHECK(glGetShaderiv(shader_id, GL_COMPILE_STATUS, &result));
         if(result) {
             return 0;
         }
         GLsizei length;
-        glGetShaderiv(shader_id, GL_INFO_LOG_LENGTH, &length);
+        GL_CHECK(glGetShaderiv(shader_id, GL_INFO_LOG_LENGTH, &length));
         if(length != 0) {
             GLchar *info_log = new GLchar[length];
-            glGetShaderInfoLog(shader_id, length, &length, info_log);
+            GL_CHECK(glGetShaderInfoLog(shader_id, length, &length, info_log));
             LOG_ERROR("Error in shader: {}", info_log);
             delete[] info_log;
         } else {
@@ -115,15 +118,15 @@ namespace gerber_3d
     int gl_program::validate(GLuint param) const
     {
         GLint result;
-        glGetProgramiv(program_id, param, &result);
+        GL_CHECK(glGetProgramiv(program_id, param, &result));
         if(result) {
             return 0;
         }
         GLsizei length;
-        glGetProgramiv(program_id, GL_INFO_LOG_LENGTH, &length);
+        GL_CHECK(glGetProgramiv(program_id, GL_INFO_LOG_LENGTH, &length));
         if(length != 0) {
             GLchar *info_log = new GLchar[length];
-            glGetProgramInfoLog(program_id, length, &length, info_log);
+            GL_CHECK(glGetProgramInfoLog(program_id, length, &length, info_log));
             LOG_ERROR("Error in program: %s", info_log);
             delete[] info_log;
         } else if(param == GL_LINK_STATUS) {
@@ -138,14 +141,14 @@ namespace gerber_3d
 
     int gl_program::init()
     {
-        vertex_shader_id = glCreateShader(GL_VERTEX_SHADER);
-        fragment_shader_id = glCreateShader(GL_FRAGMENT_SHADER);
+        GL_CHECK(vertex_shader_id = glCreateShader(GL_VERTEX_SHADER));
+        GL_CHECK(fragment_shader_id = glCreateShader(GL_FRAGMENT_SHADER));
 
-        glShaderSource(vertex_shader_id, 1, &vertex_shader_source, NULL);
-        glShaderSource(fragment_shader_id, 1, &fragment_shader_source, NULL);
+        GL_CHECK(glShaderSource(vertex_shader_id, 1, &vertex_shader_source, NULL));
+        GL_CHECK(glShaderSource(fragment_shader_id, 1, &fragment_shader_source, NULL));
 
-        glCompileShader(vertex_shader_id);
-        glCompileShader(fragment_shader_id);
+        GL_CHECK(glCompileShader(vertex_shader_id));
+        GL_CHECK(glCompileShader(fragment_shader_id));
 
         int rc = check_shader(vertex_shader_id);
         if(rc != 0) {
@@ -157,25 +160,25 @@ namespace gerber_3d
             return rc;
         }
 
-        program_id = glCreateProgram();
+        GL_CHECK(program_id = glCreateProgram());
 
-        glAttachShader(program_id, vertex_shader_id);
-        glAttachShader(program_id, fragment_shader_id);
+        GL_CHECK(glAttachShader(program_id, vertex_shader_id));
+        GL_CHECK(glAttachShader(program_id, fragment_shader_id));
 
-        glLinkProgram(program_id);
+        GL_CHECK(glLinkProgram(program_id));
         rc = validate(GL_LINK_STATUS);
         if(rc != 0) {
             cleanup();
             return rc;
         }
-        glValidateProgram(program_id);
+        GL_CHECK(glValidateProgram(program_id));
         rc = validate(GL_VALIDATE_STATUS);
         if(rc != 0) {
             cleanup();
             return rc;
         }
         use();
-        transform_location = glGetUniformLocation(program_id, "transform");
+        GL_CHECK(transform_location = glGetUniformLocation(program_id, "transform"));
         return 0;
     }
 
@@ -183,7 +186,7 @@ namespace gerber_3d
 
     void gl_program::use() const
     {
-        glUseProgram(program_id);
+        GL_CHECK(glUseProgram(program_id));
     }
 
     //////////////////////////////////////////////////////////////////////
@@ -196,7 +199,7 @@ namespace gerber_3d
         if(err != 0) {
             return err;
         }
-        color_location = glGetUniformLocation(program_id, "color");
+        GL_CHECK(color_location = glGetUniformLocation(program_id, "color"));
         return 0;
     }
 
@@ -208,7 +211,7 @@ namespace gerber_3d
         float b = ((color >> 16) & 0xff) / 255.0f;
         float g = ((color >> 8) & 0xff) / 255.0f;
         float r = ((color >> 0) & 0xff) / 255.0f;
-        glUniform4f(color_location, r, g, b, a);
+        GL_CHECK(glUniform4f(color_location, r, g, b, a));
     }
 
     //////////////////////////////////////////////////////////////////////
@@ -216,7 +219,7 @@ namespace gerber_3d
     int gl_color_program::init()
     {
         vertex_shader_source = color_vertex_shader_source;
-        fragment_shader_source = fragment_shader_source;
+        fragment_shader_source = fragment_shader_source_all;
         return gl_program::init();
     }
 
@@ -224,16 +227,16 @@ namespace gerber_3d
 
     void gl_program::cleanup()
     {
-        glDetachShader(program_id, vertex_shader_id);
-        glDetachShader(program_id, fragment_shader_id);
+        GL_CHECK(glDetachShader(program_id, vertex_shader_id));
+        GL_CHECK(glDetachShader(program_id, fragment_shader_id));
 
-        glDeleteShader(vertex_shader_id);
+        GL_CHECK(glDeleteShader(vertex_shader_id));
         vertex_shader_id = 0;
 
-        glDeleteShader(fragment_shader_id);
+        GL_CHECK(glDeleteShader(fragment_shader_id));
         fragment_shader_id = 0;
 
-        glDeleteProgram(program_id);
+        GL_CHECK(glDeleteProgram(program_id));
         program_id = 0;
     }
 
@@ -241,10 +244,10 @@ namespace gerber_3d
 
     int gl_index_array::init(GLsizei index_count)
     {
-        glGenBuffers(1, &ibo_id);
+        GL_CHECK(glGenBuffers(1, &ibo_id));
         num_indices = index_count;
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo_id);
-        glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(GLuint) * num_indices, nullptr, GL_DYNAMIC_DRAW);
+        GL_CHECK(glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo_id));
+        GL_CHECK(glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(GLuint) * num_indices, nullptr, GL_DYNAMIC_DRAW));
         return 0;
     }
 
@@ -252,7 +255,7 @@ namespace gerber_3d
 
     int gl_index_array::activate() const
     {
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo_id);
+        GL_CHECK(glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo_id));
         return 0;
     }
 
@@ -260,12 +263,12 @@ namespace gerber_3d
 
     int gl_vertex_array::init(gl_program &program, GLsizei vert_count)
     {
-        glGenBuffers(1, &vbo_id);
+        GL_CHECK(glGenBuffers(1, &vbo_id));
 
         num_verts = vert_count;
 
-        glBindBuffer(GL_ARRAY_BUFFER, vbo_id);
-        glBufferData(GL_ARRAY_BUFFER, sizeof(gl_vertex_solid) * num_verts, nullptr, GL_DYNAMIC_DRAW);
+        GL_CHECK(glBindBuffer(GL_ARRAY_BUFFER, vbo_id));
+        GL_CHECK(glBufferData(GL_ARRAY_BUFFER, sizeof(gl_vertex_solid) * num_verts, nullptr, GL_DYNAMIC_DRAW));
 
         return 0;
     }
@@ -274,10 +277,10 @@ namespace gerber_3d
 
     void gl_index_array::cleanup()
     {
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+        GL_CHECK(glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0));
 
         GLuint buffers[] = { ibo_id };
-        glDeleteBuffers((GLsizei)gerber_util::array_length(buffers), buffers);
+        GL_CHECK(glDeleteBuffers((GLsizei)gerber_util::array_length(buffers), buffers));
 
         ibo_id = 0;
     }
@@ -286,7 +289,7 @@ namespace gerber_3d
 
     int gl_vertex_array::activate() const
     {
-        glBindBuffer(GL_ARRAY_BUFFER, vbo_id);
+        GL_CHECK(glBindBuffer(GL_ARRAY_BUFFER, vbo_id));
         return 0;
     }
 
@@ -295,7 +298,7 @@ namespace gerber_3d
     int gl_vertex_array_solid::init(gl_program &program, GLsizei vert_count)
     {
         gl_vertex_array::init(program, vert_count);
-        position_location = glGetAttribLocation(program.program_id, "position");
+        GL_CHECK(position_location = glGetAttribLocation(program.program_id, "position"));
         return 0;
     }
 
@@ -304,8 +307,8 @@ namespace gerber_3d
     int gl_vertex_array_solid::activate() const
     {
         gl_vertex_array::activate();
-        glEnableVertexAttribArray(position_location);
-        glVertexAttribPointer(position_location, 2, GL_FLOAT, GL_FALSE, sizeof(gl_vertex_solid), (void *)(offsetof(gl_vertex_solid, x)));
+        GL_CHECK(glEnableVertexAttribArray(position_location));
+        GL_CHECK(glVertexAttribPointer(position_location, 2, GL_FLOAT, GL_FALSE, sizeof(gl_vertex_solid), (void *)(offsetof(gl_vertex_solid, x))));
         return 0;
     }
 
@@ -314,8 +317,8 @@ namespace gerber_3d
     int gl_vertex_array_color::init(gl_program &program, GLsizei vert_count)
     {
         gl_vertex_array::init(program, vert_count);
-        position_location = glGetAttribLocation(program.program_id, "position");
-        color_location = glGetAttribLocation(program.program_id, "color");
+        GL_CHECK(position_location = glGetAttribLocation(program.program_id, "position"));
+        GL_CHECK(color_location = glGetAttribLocation(program.program_id, "color"));
         return 0;
     }
 
@@ -324,10 +327,10 @@ namespace gerber_3d
     int gl_vertex_array_color::activate() const
     {
         gl_vertex_array::activate();
-        glEnableVertexAttribArray(position_location);
-        glEnableVertexAttribArray(color_location);
-        glVertexAttribPointer(position_location, 2, GL_FLOAT, GL_FALSE, sizeof(gl_vertex_color), (void *)(offsetof(gl_vertex_color, x)));
-        glVertexAttribPointer(color_location, 4, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(gl_vertex_color), (void *)(offsetof(gl_vertex_color, color)));
+        GL_CHECK(glEnableVertexAttribArray(position_location));
+        GL_CHECK(glEnableVertexAttribArray(color_location));
+        GL_CHECK(glVertexAttribPointer(position_location, 2, GL_FLOAT, GL_FALSE, sizeof(gl_vertex_color), (void *)(offsetof(gl_vertex_color, x))));
+        GL_CHECK(glVertexAttribPointer(color_location, 4, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(gl_vertex_color), (void *)(offsetof(gl_vertex_color, color))));
         return 0;
     }
 
@@ -335,12 +338,74 @@ namespace gerber_3d
 
     void gl_vertex_array::cleanup()
     {
-        glBindBuffer(GL_ARRAY_BUFFER, 0);
+        GL_CHECK(glBindBuffer(GL_ARRAY_BUFFER, 0));
 
         GLuint buffers[] = { vbo_id };
-        glDeleteBuffers((GLsizei)gerber_util::array_length(buffers), buffers);
+        GL_CHECK(glDeleteBuffers((GLsizei)gerber_util::array_length(buffers), buffers));
 
         vbo_id = 0;
     }
 
+    //////////////////////////////////////////////////////////////////////
+
+    int gl_render_target::init(GLuint new_width, GLuint new_height)
+    {
+        GL_CHECK(glGenFramebuffers(1, &fbo));
+        GL_CHECK(glBindFramebuffer(GL_FRAMEBUFFER, fbo));
+
+        GL_CHECK(glGenTextures(1, &texture));
+        GL_CHECK(glBindTexture(GL_TEXTURE_2D, texture));
+
+        GL_CHECK(glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, new_width, new_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL));
+
+        GL_CHECK(glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texture, 0));
+        GLenum err = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+        if(err != GL_FRAMEBUFFER_COMPLETE) {
+            LOG_ERROR("glCheckFramebufferStatus failed: {}", err);
+            cleanup();
+            return 1;
+        }
+        width = new_width;
+        height = new_height;
+        GL_CHECK(glBindTexture(GL_TEXTURE_2D, 0));
+        GL_CHECK(glBindFramebuffer(GL_FRAMEBUFFER, 0));
+        return 0;
+    }
+
+    //////////////////////////////////////////////////////////////////////
+
+    void gl_render_target::activate()
+    {
+        glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+    }
+
+    //////////////////////////////////////////////////////////////////////
+
+    void gl_render_target::cleanup()
+    {
+        GL_CHECK(glBindTexture(GL_TEXTURE_2D, 0));
+        GL_CHECK(glBindFramebuffer(GL_FRAMEBUFFER, 0));
+
+        GLuint t[1] = { texture };
+        GLuint f[] = { fbo };
+
+        GL_CHECK(glDeleteTextures(1, t));
+        GL_CHECK(glDeleteFramebuffers(1, f));
+    }
+
+    //////////////////////////////////////////////////////////////////////
+
+    void gl_drawlist::draw()
+    {
+        vertex_array.activate();
+        gl_vertex_color *v;
+        GL_CHECK(v = (gl_vertex_color *)glMapBuffer(GL_ARRAY_BUFFER, GL_WRITE_ONLY));
+        memcpy(v, verts.data(), verts.size() * sizeof(gl_vertex_color));
+        GL_CHECK(glUnmapBuffer(GL_ARRAY_BUFFER));
+        GL_CHECK(glEnable(GL_BLEND));
+        GL_CHECK(glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA));
+        for(auto const &d : drawlist) {
+            GL_CHECK(glDrawArrays(d.draw_type, d.offset, d.count));
+        }
+    }
 }    // namespace gerber_3d

@@ -46,13 +46,19 @@ namespace gerber_3d
         gerber_file = g;
         triangulator.clear();
         g->draw(*this);
+    }
 
-        // create and fill in the GL vertex/index buffers
-        vertex_array.init(*program, (GLsizei)triangulator.vertices.size());
-        vertex_array.activate();
-        indices_triangles.init((GLsizei)triangulator.indices.size());
-        indices_triangles.activate();
-        triangulator.finalize();
+    //////////////////////////////////////////////////////////////////////
+
+    void gl_drawer::on_finished_loading()
+    {
+        if(triangulator.vertices.size() != 0 && triangulator.indices.size() != 0) {
+            vertex_array.init(*program, (GLsizei)triangulator.vertices.size());
+            vertex_array.activate();
+            indices_triangles.init((GLsizei)triangulator.indices.size());
+            indices_triangles.activate();
+            triangulator.finalize();
+        }
     }
 
     //////////////////////////////////////////////////////////////////////
@@ -131,14 +137,19 @@ namespace gerber_3d
 
         glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
         glEnable(GL_BLEND);
-        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        glBlendEquationSeparate(GL_FUNC_ADD, GL_FUNC_ADD);
+        glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
 
         for(size_t n = 0; n < triangulator.draw_calls.size(); ++n) {
 
             tesselator_draw_call &d = triangulator.draw_calls[n];
 
             if(fill) {
-                program->set_color((d.flags & 1) ? clear_color : fill_color);
+                if(d.flags & 1) {
+                    program->set_color(clear_color);
+                } else {
+                    program->set_color(fill_color);
+                }
                 d.draw_filled();
             }
 
@@ -147,7 +158,6 @@ namespace gerber_3d
                 d.draw_outline();
             }
         }
-        //triangulator.draw_range(0, triangulator.draw_calls.size(), tesselator::draw_flag_filled | tesselator::draw_flag_outline);
     }
 
 }    // namespace gerber_3d

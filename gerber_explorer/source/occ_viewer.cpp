@@ -158,7 +158,7 @@ HRESULT occ_viewer::create_window(int left, int top, int width, int height)
     int w = rc.right - rc.left;
     int h = rc.bottom - rc.top;
 
-    hwnd = CreateWindowA(window_class_name, "Gerber 3D", WS_OVERLAPPEDWINDOW, rc.left, rc.top, w, h, NULL, NULL, app_instance, this);
+    hwnd = CreateWindowExA(0, window_class_name, "Gerber 3D", WS_OVERLAPPEDWINDOW, rc.left, rc.top, w, h, NULL, NULL, app_instance, this);
 
     if(hwnd == NULL) {
         DWORD err = GetLastError();

@@ -43,6 +43,22 @@ namespace gerber_3d
     };
 
     //////////////////////////////////////////////////////////////////////
+
+    struct gl_render_target
+    {
+        GLuint fbo{};
+        GLuint texture{};
+        int width{};
+        int height{};
+
+        gl_render_target() = default;
+
+        int init(GLuint new_width, GLuint new_height);
+        void activate();
+        void cleanup();
+    };
+
+    //////////////////////////////////////////////////////////////////////
     // uniform color
 
     struct gl_solid_program : gl_program
@@ -117,4 +133,107 @@ namespace gerber_3d
         int activate() const override;
     };
 
+    //////////////////////////////////////////////////////////////////////
+
+    struct gl_drawlist
+    {
+        using rect = gerber_lib::gerber_2d::rect;
+        using vec2d = gerber_lib::gerber_2d::vec2d;
+
+        struct gl_drawlist_entry
+        {
+            GLenum draw_type;
+            GLuint offset;
+            GLuint count;
+        };
+
+        static int constexpr max_verts = 8192;
+
+        gl_vertex_array_color vertex_array;
+
+        std::vector<gl_vertex_color> verts;
+        std::vector<gl_drawlist_entry> drawlist;
+
+        void init(gl_color_program &program)
+        {
+            vertex_array.init(program, max_verts);
+            reset();
+        }
+
+        void reset()
+        {
+            verts.clear();
+            verts.reserve(max_verts);
+            drawlist.clear();
+        }
+
+        void add_vertex(vec2d const &pos, uint32_t color)
+        {
+            if(drawlist.empty()) {
+                return;
+            }
+            if(verts.size() >= max_verts) {
+                return;
+            }
+            verts.emplace_back((float)pos.x, (float)pos.y, color);
+            drawlist.back().count += 1;
+        }
+
+        void add_drawlist_entry(GLenum type)
+        {
+            drawlist.emplace_back(type, (GLuint)verts.size(), 0);
+        }
+
+        void lines()
+        {
+            add_drawlist_entry(GL_LINES);
+        }
+
+        void add_line(vec2d const &start, vec2d const &end, uint32_t color)
+        {
+            add_vertex(start, color);
+            add_vertex(end, color);
+        }
+
+        void add_outline_rect(rect const &r, uint32_t color)
+        {
+            add_drawlist_entry(GL_LINE_STRIP);
+            add_vertex(r.min_pos, color);
+            add_vertex({ r.max_pos.x, r.min_pos.y }, color);
+            add_vertex(r.max_pos, color);
+            add_vertex({ r.min_pos.x, r.max_pos.y }, color);
+            add_vertex(r.min_pos, color);
+        }
+
+        void add_rect(rect const &r, uint32_t color)
+        {
+            add_drawlist_entry(GL_TRIANGLE_FAN);
+            add_vertex(r.min_pos, color);
+            add_vertex({ r.max_pos.x, r.min_pos.y }, color);
+            add_vertex(r.max_pos, color);
+            add_vertex({ r.min_pos.x, r.max_pos.y }, color);
+        }
+
+        void draw();
+    };
+
 }    // namespace gerber_3d
+
+//////////////////////////////////////////////////////////////////////
+
+#if defined(_DEBUG)
+#define GL_CHECK(x)                                                       \
+    do {                                                                  \
+        x;                                                                \
+        GLenum __err = glGetError();                                      \
+        if(__err != 0) {                                                  \
+            char const *__err_text = (char const *)gluErrorString(__err); \
+            LOG_ERROR("ERROR {} ({}) from {}", __err, __err_text, #x);    \
+        }                                                                 \
+    } while(0)
+#else
+#define GL_CHECK(x) \
+    do {            \
+        x;          \
+    } while(0)
+#endif

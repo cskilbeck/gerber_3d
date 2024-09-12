@@ -20,7 +20,7 @@
 #include "gerber_image.h"
 #include "gerber_reader.h"
 
-LOG_CONTEXT("gerber_lib", verbose);
+LOG_CONTEXT("gerber_lib", info);
 
 namespace
 {
@@ -97,8 +97,16 @@ namespace
                 beta += 360.0;
             }
         }
+
+        if(beta < alpha) {
+            std::swap(alpha, beta);
+        }
+
         net->circle_segment.start_angle = alpha;
         net->circle_segment.end_angle = beta;
+
+        LOG_DEBUG("ARC: POS {}, SIZE: {}, START: {:g}, END: {:g}", net->circle_segment.pos, net->circle_segment.size, net->circle_segment.start_angle,
+                 net->circle_segment.end_angle);
 
         return ok;
     }
@@ -1319,7 +1327,7 @@ namespace gerber_lib
 
     gerber_error_code gerber::parse_aperture_definition(gerber_aperture *aperture, gerber_image *cur_image, double unit_scale)
     {
-        LOG_CONTEXT("parse_aperture", debug);
+        LOG_CONTEXT("parse_aperture", info);
 
         char c;
         CHECK(reader.read_char(&c));

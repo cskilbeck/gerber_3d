@@ -41,6 +41,13 @@ namespace gerber_util
 
     //////////////////////////////////////////////////////////////////////
 
+    void clear_settings()
+    {
+        std::filesystem::remove(get_ini_filename());
+    }
+
+    //////////////////////////////////////////////////////////////////////
+
     bool save_string(std::string const &name, std::string const &value)
     {
         return WritePrivateProfileStringA("GerberExplorer", name.c_str(), value.c_str(), get_ini_filename().c_str()) != 0;

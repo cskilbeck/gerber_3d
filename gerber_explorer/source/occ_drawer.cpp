@@ -156,13 +156,13 @@ namespace gerber_3d
         }
     }
 
-    //////////////////////////////////////////////////////////////////////
+    ////////////////////////////////////////////////////////////////////////
 
-    void occ_drawer::on_gerber_finished()
-    {
-        vout.add_shapes_to_scene();
-        InvalidateRect(vout.hwnd, nullptr, false);
-    }
+    //void occ_drawer::on_gerber_finished()
+    //{
+    //    vout.add_shapes_to_scene();
+    //    InvalidateRect(vout.hwnd, nullptr, false);
+    //}
 
     //////////////////////////////////////////////////////////////////////
 
