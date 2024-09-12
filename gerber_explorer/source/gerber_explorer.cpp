@@ -25,18 +25,18 @@ int main(int argc, char **argv)
 
     std::string filename;
 
-    if(argc == 2) {
-        filename = argv[1];
-    } else {
-        gerber_util::load_string("filename", filename);
-    }
-
     // gerber_3d::gdi_drawer gdi;
     // gdi.create_window(850, 100, 700, 700);
     // gdi.load_gerber_file(filename);
 
     gerber_3d::gl_window gl;
-    gl.create_window(100, 100, 700, 700);
+    gl.create_window(100, 50, 1600, 900);
+
+    // Should it still reload all the files it had open last time it was closed if the command line specifies one ?
+
+    if(argc == 2) {
+        gl.load_gerber_files({ argv[1] });
+    }
 
     ShowWindow(gl.hwnd, SW_SHOW);
 

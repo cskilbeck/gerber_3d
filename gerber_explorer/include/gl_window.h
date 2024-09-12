@@ -52,6 +52,8 @@ namespace gerber_3d
             uint32_t clear_color;
             uint32_t outline_color;
 
+            void draw();
+
             bool operator<(gerber_layer const &other)
             {
                 return index < other.index;
@@ -67,6 +69,7 @@ namespace gerber_3d
             int num_paths{};                                     // # of paths in this entity
             bool fill{};                                         // fill (true) or clear (false)
             bool selected{};                                     // highlighted entities are selected when mouse released
+
             gerber_lib::gerber_2d::rect pixel_space_bounds{};    // screen space bounding rectangle
 
             gerber_entity() = default;
@@ -78,12 +81,6 @@ namespace gerber_3d
         };
 
         //////////////////////////////////////////////////////////////////////
-
-        std::vector<gerber_entity> entities;
-
-        gerber_layer *selected_layer{ nullptr };
-
-        std::vector<gerber_layer *> layers;
 
         using vec2d = gerber_lib::gerber_2d::vec2d;
         using rect = gerber_lib::gerber_2d::rect;
@@ -128,6 +125,12 @@ namespace gerber_3d
             mouse_drag_select
         };
 
+        std::vector<gerber_entity> entities;
+
+        gerber_layer *selected_layer{ nullptr };
+
+        std::vector<gerber_layer *> layers;
+
         mouse_drag_action mouse_drag{};
 
         vec2d drag_mouse_cur_pos{};
@@ -141,20 +144,24 @@ namespace gerber_3d
         bool show_axes{ true };
         bool show_extent{ true };
 
+        int multisample_count{ 4 };
+        int max_multisamples{ 1 };
+
         bool window_size_valid{ false };
 
         uint32_t axes_color{ 0x60ffffff };
         uint32_t extent_color{ 0xC000ffff };
+        uint32_t background_color{ 0xff602010 };
 
         gl_solid_program solid_program{};
         gl_color_program color_program{};
+        gl_textured_program textured_program{};
 
-        gl_vertex_array verts{};
-        gl_index_array indices{};
+        gl_drawlist overlay{};
 
-        gl_drawlist overlay;
+        gl_render_target render_target{};
 
-        gl_render_target render_target;
+        gl_vertex_array_textured fullscreen_blit_verts;
 
         int window_width{};
         int window_height{};

@@ -2,23 +2,84 @@
 
 // 0xAABBGGRR (RGBA in memory)
 
-namespace color
+namespace gl_color
 {
-    inline uint32_t from_floats(float f[4])
+    struct float4
     {
-        uint32_t red = (int)(f[0] * 255.0f) & 0xff;
-        uint32_t green = (int)(f[1] * 255.0f) & 0xff;
-        uint32_t blue = (int)(f[2] * 255.0f) & 0xff;
-        uint32_t alpha = (int)(f[3] * 255.0f) & 0xff;
-        return (alpha << 24) | (blue << 16) | (green << 8) | red;
+        float f[4];
+
+        float4() = default;
+
+        float4(float *v)
+        {
+            memcpy(f, v, sizeof(float) * 4);
+        }
+
+        float4(uint32_t color)
+        {
+            float constexpr s = 1.0f / 255.0f;
+            f[0] = (color & 0xff) * s;
+            f[1] = ((color >> 8) & 0xff) * s;
+            f[2] = ((color >> 16) & 0xff) * s;
+            f[3] = (color >> 24) * s;
+        }
+
+        float4(float x, float y, float z, float w)
+        {
+            f[0] = x;
+            f[1] = y;
+            f[2] = z;
+            f[3] = w;
+        }
+
+        float4 &operator=(float *v)
+        {
+            return *this = v;
+        }
+
+        float4 &operator=(uint32_t color)
+        {
+            return *this = float4(color);
+        }
+
+        operator float *()
+        {
+            return f;
+        }
+
+        operator float const *() const
+        {
+            return f;
+        }
+
+        explicit operator uint32_t() const
+        {
+            uint32_t red = (int)(f[0] * 255.0f) & 0xff;
+            uint32_t green = (int)(f[1] * 255.0f) & 0xff;
+            uint32_t blue = (int)(f[2] * 255.0f) & 0xff;
+            uint32_t alpha = (int)(f[3] * 255.0f) & 0xff;
+            return (alpha << 24) | (blue << 16) | (green << 8) | red;
+        }
+
+        float const &operator[](int i) const
+        {
+            return f[i];
+        }
+
+        float &operator[](int i)
+        {
+            return f[i];
+        }
+    };
+
+    inline uint32_t from_floats(float4 const &f)
+    {
+        return (uint32_t)f;
     }
 
-    inline void to_floats(uint32_t color, float f[4])
+    inline float4 to_floats(uint32_t color)
     {
-        f[0] = ((color >> 0) & 0xff) / 255.0f;
-        f[1] = ((color >> 8) & 0xff) / 255.0f;
-        f[2] = ((color >> 16) & 0xff) / 255.0f;
-        f[3] = ((color >> 24) & 0xff) / 255.0f;
+        return float4(color);
     }
 
     enum : uint32_t
@@ -161,4 +222,4 @@ namespace color
         white_smoke = 0xfff5f5f5,
     };
 
-}
+}    // namespace color

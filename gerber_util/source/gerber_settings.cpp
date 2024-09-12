@@ -87,6 +87,18 @@ namespace gerber_util
 
     //////////////////////////////////////////////////////////////////////
 
+    bool load_uint(std::string const &name, uint32_t &value)
+    {
+        std::string d;
+        if(load_string(name, d)) {
+            value = (uint32_t)_strtoi64(d.c_str(), nullptr, 16);
+            return true;
+        }
+        return false;
+    }
+
+    //////////////////////////////////////////////////////////////////////
+
     bool load_double(std::string const &name, double &value)
     {
         std::string d;
@@ -114,6 +126,13 @@ namespace gerber_util
     bool save_int(std::string const &name, int value)
     {
         return save_string(name, std::format("{}", value));
+    }
+
+    //////////////////////////////////////////////////////////////////////
+
+    bool save_uint(std::string const &name, uint32_t value)
+    {
+        return save_string(name, std::format("{:08x}", value));
     }
 
     //////////////////////////////////////////////////////////////////////

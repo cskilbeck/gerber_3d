@@ -135,10 +135,8 @@ namespace gerber_3d
         vertex_array.activate();
         indices_triangles.activate();
 
-        glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-        glEnable(GL_BLEND);
         glBlendEquationSeparate(GL_FUNC_ADD, GL_FUNC_ADD);
-        glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+        glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
         for(size_t n = 0; n < triangulator.draw_calls.size(); ++n) {
 
@@ -146,15 +144,15 @@ namespace gerber_3d
 
             if(fill) {
                 if(d.flags & 1) {
-                    program->set_color(clear_color);
+                    program->set_color(0xff00ff00); // green is cleared sections
                 } else {
-                    program->set_color(fill_color);
+                    program->set_color(0xff0000ff); // red is filled sections
                 }
                 d.draw_filled();
             }
 
             if(outline) {
-                program->set_color(outline_color);
+                program->set_color(0xffff0000); // outlines are blue
                 d.draw_outline();
             }
         }
