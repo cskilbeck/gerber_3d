@@ -3,6 +3,9 @@
 #include "gerber_log.h"
 #include "gerber_lib.h"
 #include "gerber_util.h"
+#include "fonts.h"
+
+#include <vector>
 
 #include "gl_window.h"
 #include "gl_drawer.h"
@@ -107,6 +110,15 @@ namespace
 
 namespace gerber_3d
 {
+    //////////////////////////////////////////////////////////////////////
+
+    void gl_window::fit_to_window()
+    {
+        if(selected_layer != nullptr) {
+            zoom_to_rect(selected_layer->layer->gerber_file->image.info.extent);
+        }
+    }
+
     //////////////////////////////////////////////////////////////////////
 
     void gl_window::zoom_to_rect(rect const &zoom_rect, double border_ratio)
@@ -351,24 +363,26 @@ namespace gerber_3d
             break;
 
         case WM_USER: {
-            std::string filename = get_open_filename();
-            if(!filename.empty()) {
-                gerber *g = new gerber();
-                if(g->parse_file(filename.c_str()) == ok) {
-                    gl_drawer *drawer = new gl_drawer();
-                    drawer->program = &solid_program;
-                    drawer->set_gerber(g);
+            std::vector<std::string> filenames;
+            if(get_open_filenames(filenames)) {
+                for(auto const &filename : filenames) {
+                    gerber *g = new gerber();
+                    if(g->parse_file(filename.c_str()) == ok) {
+                        gl_drawer *drawer = new gl_drawer();
+                        drawer->program = &solid_program;
+                        drawer->set_gerber(g);
 
-                    gerber_layer *layer = new gerber_layer();
-                    layer->layer = drawer;
-                    layer->fill_color = layer_colors[layers.size() % gerber_util::array_length(layer_colors)];
-                    layer->clear_color = color::black;
-                    layer->outline_color = color::white & 0x80ffffff;
-                    layer->outline = false;
-                    layer->filename = std::filesystem::path(filename).filename().string();
-                    layers.push_back(layer);
+                        gerber_layer *layer = new gerber_layer();
+                        layer->layer = drawer;
+                        layer->fill_color = layer_colors[layers.size() % gerber_util::array_length(layer_colors)];
+                        layer->clear_color = color::black;
+                        layer->outline_color = color::white & 0x80ffffff;
+                        layer->outline = false;
+                        layer->filename = std::filesystem::path(filename).filename().string();
+                        layers.push_back(layer);
 
-                    zoom_to_rect(g->image.info.extent);
+                        zoom_to_rect(g->image.info.extent);
+                    }
                 }
             }
         } break;
@@ -563,6 +577,10 @@ namespace gerber_3d
 
         ImGui::LoadIniSettingsFromDisk("ImGui.ini");
 
+        ImFontConfig font_cfg;
+        font_cfg.FontDataOwnedByAtlas = false;
+        io.Fonts->AddFontFromMemoryTTF((void *)gerber_font::Consolas_ttf, (int)gerber_font::Consolas_ttf_size, 14, &font_cfg);
+
         // setup shader
 
         if(solid_program.init() != 0) {
@@ -577,6 +595,8 @@ namespace gerber_3d
 
     void gl_window::ui()
     {
+        static bool show_stats{ false };
+
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplWin32_NewFrame();
         ImGui::NewFrame();
@@ -586,16 +606,79 @@ namespace gerber_3d
                 if(ImGui::MenuItem("Open", nullptr, nullptr)) {
                     PostMessage(hwnd, WM_USER, 0, 0);
                 }
+                ImGui::MenuItem("Stats", nullptr, &show_stats);
                 if(ImGui::MenuItem("Exit", "Esc", nullptr)) {
                     DestroyWindow(hwnd);
                     return;
                 }
                 ImGui::EndMenu();
             }
+            if(ImGui::BeginMenu("View")) {
+                if(ImGui::MenuItem("Fit to window", nullptr, nullptr, selected_layer != nullptr)) {
+                    fit_to_window();
+                }
+                ImGui::EndMenu();
+            }
             ImGui::EndMenuBar();
         }
-        for(auto const layer : layers) {
-            if(ImGui::CollapsingHeader(layer->filename.c_str(), ImGuiTreeNodeFlags_OpenOnArrow)) {
+
+        for(int i = 0; i < (int)layers.size(); ++i) {
+            bool close = false;
+            gerber_layer *layer = layers[i];
+            ImGui::PushID(i);
+            std::string name = layer->filename.c_str();
+            if(layer->selected) {
+                ImGui::PushStyleColor(ImGuiCol_Header, IM_COL32(255, 255, 255, 255));
+                ImGui::PushStyleColor(ImGuiCol_HeaderHovered, IM_COL32(255, 255, 255, 255));
+                ImGui::PushStyleColor(ImGuiCol_HeaderActive, IM_COL32(255, 255, 255, 255));
+                ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(0, 0, 0, 255));
+            }
+            bool node_open = ImGui::TreeNodeEx(name.c_str(), ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_Framed);
+            if(layer->selected) {
+                ImGui::PopStyleColor();
+                ImGui::PopStyleColor();
+                ImGui::PopStyleColor();
+                ImGui::PopStyleColor();
+            }
+            if(ImGui::IsItemClicked() && node_open == layer->expanded) {
+                if(layer->selected) {
+                    select_layer(nullptr);
+                } else {
+                    select_layer(layer);
+                }
+            }
+            layer->expanded = node_open;
+            if(ImGui::BeginDragDropSource()) {
+                ImGui::SetDragDropPayload("TREENODE_PAYLOAD", &layer->index, sizeof(int));
+                ImGui::EndDragDropSource();
+            }
+            ImGui::Indent();
+            if(ImGui::BeginDragDropTarget()) {
+                if(ImGuiPayload const *payload = ImGui::AcceptDragDropPayload("TREENODE_PAYLOAD", ImGuiDragDropFlags_None)) {
+                    int index = *(int const *)payload->Data;
+                    auto it = layers.begin() + index;
+                    auto node = *it;
+                    layers.erase(it);
+                    layers.insert(layers.begin() + i, node);
+                    int new_index = 0;
+                    for(auto const &l : layers) {
+                        l->index = new_index++;
+                        if(l->selected) {
+                            select_layer(l);
+                        }
+                    }
+                }
+                ImGui::EndDragDropTarget();
+            }
+            ImGui::Unindent();
+            if(node_open) {
+                ImGui::Checkbox("Hide", &layer->hide);
+                ImGui::SameLine();
+                ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 100);
+                if(ImGui::Button("Close")) {
+                    close = true;
+                }
+                ImGui::PopStyleVar();
                 ImVec4 fill_color_f;
                 ImVec4 clear_color_f;
                 ImVec4 outline_color_f;
@@ -603,30 +686,56 @@ namespace gerber_3d
                 color::to_floats(layer->clear_color, &clear_color_f.x);
                 color::to_floats(layer->outline_color, &outline_color_f.x);
                 auto flags = ImGuiColorEditFlags_AlphaBar | ImGuiColorEditFlags_AlphaPreview | ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoTooltip;
-                if(ImGui::ColorEdit4("Fill", &fill_color_f.x, flags)) {
-                    layer->fill_color = color::from_floats(&fill_color_f.x);
+                if(ImGui::Checkbox("Fill", &layer->fill)) {
+                    if(!layer->fill && !layer->outline) {
+                        layer->outline = true;
+                    }
                 }
-                ImGui::SameLine();
-                if(ImGui::ColorEdit4("Clear", &clear_color_f.x, flags)) {
-                    layer->clear_color = color::from_floats(&clear_color_f.x);
+                if(layer->fill) {
+                    ImGui::SameLine();
+                    if(ImGui::ColorEdit4("Fill", &fill_color_f.x, flags)) {
+                        layer->fill_color = color::from_floats(&fill_color_f.x);
+                    }
+                    ImGui::SameLine();
+                    if(ImGui::ColorEdit4("Clear", &clear_color_f.x, flags)) {
+                        layer->clear_color = color::from_floats(&clear_color_f.x);
+                    }
                 }
-                ImGui::Checkbox("Outline", &layer->outline);
+                if(ImGui::Checkbox("Outline", &layer->outline)) {
+                    if(!layer->fill && !layer->outline) {
+                        layer->fill = true;
+                    }
+                }
                 if(layer->outline) {
                     ImGui::SameLine();
                     if(ImGui::ColorEdit4("", &outline_color_f.x, flags)) {
                         layer->outline_color = color::from_floats(&outline_color_f.x);
                     }
                 }
+                ImGui::TreePop();
+            }
+            ImGui::PopID();
+            if(close) {
+                layers.erase(layers.begin() + i);
+                selected_layer = nullptr;
+                for(auto l : layers) {
+                    if(l->selected) {
+                        selected_layer = l;
+                        break;
+                    }
+                }
             }
         }
         ImGui::End();
 
-        ImGui::Begin("Stats");
-        {
-            ImGuiIO &io = ImGui::GetIO();
-            ImGui::Text("(%.1f FPS (%.3f ms)", io.Framerate, 1000.0f / io.Framerate);
+        if(show_stats) {
+            ImGui::Begin("Stats");
+            {
+                ImGuiIO &io = ImGui::GetIO();
+                ImGui::Text("(%.1f FPS (%.3f ms)", io.Framerate, 1000.0f / io.Framerate);
+            }
+            ImGui::End();
         }
-        ImGui::End();
         ImGui::Render();
     }
 
@@ -663,8 +772,11 @@ namespace gerber_3d
         glClearColor(0.1f, 0.1f, 0.2f, 0);
         glClear(GL_COLOR_BUFFER_BIT);
 
-        for(auto layer : layers) {
-            layer->layer->draw(layer->fill_color, layer->clear_color, layer->outline, layer->outline_color);
+        for(size_t n = layers.size(); n != 0;) {
+            gerber_layer *layer = layers[--n];
+            if(!layer->hide) {
+                layer->layer->draw(layer->fill, layer->fill_color, layer->clear_color, layer->outline, layer->outline_color);
+            }
         }
 
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
@@ -674,7 +786,7 @@ namespace gerber_3d
 
     //////////////////////////////////////////////////////////////////////
 
-    std::string gl_window::get_open_filename()
+    bool gl_window::get_open_filenames(std::vector<std::string> &filenames)
     {
         // open a file name
         char filename[MAX_PATH] = {};
@@ -690,12 +802,24 @@ namespace gerber_3d
         ofn.lpstrFileTitle = NULL;
         ofn.nMaxFileTitle = 0;
         ofn.lpstrInitialDir = NULL;
-        ofn.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST;
+        ofn.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST | OFN_ALLOWMULTISELECT | OFN_EXPLORER;
 
         if(GetOpenFileNameA(&ofn)) {
-            return filename;
+            int num_files = 1;
+            char const *n = ofn.lpstrFile;
+            std::string first_name{ n };
+            n += strlen(n) + 1;
+            while(*n) {
+                filenames.push_back(std::format("{}\\{}", first_name, std::string{ n }));
+                n += strlen(n) + 1;
+                num_files += 1;
+            }
+            if(num_files == 1) {
+                filenames.push_back(first_name);
+            }
+            return true;
         }
-        return std::string{};
+        return false;
     }
 
 }    // namespace gerber_3d

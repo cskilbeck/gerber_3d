@@ -53,8 +53,6 @@ namespace gerber_3d
         indices_triangles.init((GLsizei)triangulator.indices.size());
         indices_triangles.activate();
         triangulator.finalize();
-
-        LOG_DEBUG("DONE");
     }
 
     //////////////////////////////////////////////////////////////////////
@@ -125,7 +123,7 @@ namespace gerber_3d
 
     //////////////////////////////////////////////////////////////////////
 
-    void gl_drawer::draw(uint32_t fill_color, uint32_t clear_color, bool outline, uint32_t outline_color)
+    void gl_drawer::draw(bool fill, uint32_t fill_color, uint32_t clear_color, bool outline, uint32_t outline_color)
     {
         program->use();
         vertex_array.activate();
@@ -139,8 +137,10 @@ namespace gerber_3d
 
             tesselator_draw_call &d = triangulator.draw_calls[n];
 
-            program->set_color((d.flags & 1) ? clear_color : fill_color);
-            d.draw_filled();
+            if(fill) {
+                program->set_color((d.flags & 1) ? clear_color : fill_color);
+                d.draw_filled();
+            }
 
             if(outline) {
                 program->set_color(outline_color);

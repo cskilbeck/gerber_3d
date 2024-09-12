@@ -36,15 +36,38 @@ namespace gerber_3d
 
         struct gerber_layer
         {
+            int index;
             gl_drawer *layer{ nullptr };
+            bool hide{ false };
             bool outline{ false };
+            bool fill{ true };
+            bool expanded{ false };
+            bool selected{ false };
             std::string filename;
             uint32_t fill_color;
             uint32_t clear_color;
             uint32_t outline_color;
+
+            bool operator<(gerber_layer const &other)
+            {
+                return index < other.index;
+            }
         };
 
-        std::list<gerber_layer *> layers;
+        gerber_layer *selected_layer{ nullptr };
+
+        void select_layer(gerber_layer *l)
+        {
+            if(selected_layer != nullptr) {
+                selected_layer->selected = false;
+            }
+            selected_layer = l;
+            if(selected_layer != nullptr) {
+                selected_layer->selected = true;
+            }
+        }
+
+        std::vector<gerber_layer *> layers;
 
         using vec2d = gerber_lib::gerber_2d::vec2d;
         using rect = gerber_lib::gerber_2d::rect;
@@ -53,6 +76,8 @@ namespace gerber_3d
         int create_window(int x_pos, int y_pos, int client_width, int client_height);
         LRESULT CALLBACK wnd_proc(UINT message, WPARAM wParam, LPARAM lParam);
         static LRESULT CALLBACK wnd_proc_proxy(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam);
+
+        void fit_to_window();
 
         void zoom_to_rect(rect const &zoom_rect, double border_ratio = 1.1);
         void zoom_image(vec2d const &pos, double zoom_scale);
@@ -66,7 +91,7 @@ namespace gerber_3d
         {
         }
 
-        std::string get_open_filename();
+        bool get_open_filenames(std::vector<std::string> &filenames);
 
         enum mouse_drag_action
         {
