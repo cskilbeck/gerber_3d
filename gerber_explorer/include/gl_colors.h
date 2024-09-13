@@ -84,6 +84,7 @@ namespace gl_color
 
     enum : uint32_t
     {
+        clear = 0x00000000,
         black = 0xff000000,
         white = 0xffffffff,
         red = 0xff0000ff,

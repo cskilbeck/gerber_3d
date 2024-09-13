@@ -125,6 +125,8 @@ namespace gerber_3d
             mouse_drag_select
         };
 
+        void set_mouse_mode(mouse_drag_action action, LPARAM lParam = 0);
+
         std::vector<gerber_entity> entities;
 
         gerber_layer *selected_layer{ nullptr };
@@ -136,10 +138,13 @@ namespace gerber_3d
         vec2d drag_mouse_cur_pos{};
         vec2d drag_mouse_start_pos{};
 
-        rect drag_rect_raw{};
+        vec2d mouse_world_pos{};
+        bool imperial{};
+
         rect drag_rect{};
 
         bool show_options{ false };
+        bool show_stats{ false };
 
         bool show_axes{ true };
         bool show_extent{ true };

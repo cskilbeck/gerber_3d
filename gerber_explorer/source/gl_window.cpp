@@ -52,7 +52,8 @@ namespace
 
     double const drag_select_offset_start_distance = 16;
 
-    uint32_t layer_colors[] = { gl_color::white, gl_color::green, gl_color::dark_cyan, gl_color::lime_green, gl_color::antique_white, gl_color::corn_flower_blue,
+    uint32_t layer_colors[] = { gl_color::white,      gl_color::green,         gl_color::dark_cyan,
+                                gl_color::lime_green, gl_color::antique_white, gl_color::corn_flower_blue,
                                 gl_color::gold };
 
     uint32_t layer_color = gl_color::red;
@@ -165,7 +166,10 @@ namespace gerber_3d
 
         save_bool("show_axes", show_axes);
         save_bool("show_extent", show_extent);
+        save_bool("show_stats", show_stats);
+        save_bool("show_options", show_options);
         save_uint("background_color", background_color);
+        save_int("multisample_count", multisample_count);
 
         int index = 0;
         for(auto const layer : layers) {
@@ -185,7 +189,10 @@ namespace gerber_3d
 
         load_bool("show_axes", show_axes);
         load_bool("show_extent", show_extent);
+        load_bool("show_stats", show_stats);
+        load_bool("show_options", show_options);
         load_uint("background_color", background_color);
+        load_int("multisample_count", multisample_count);
 
         std::vector<std::string> names;
         for(int index = 0; index < 50; ++index) {
@@ -328,6 +335,70 @@ namespace gerber_3d
 
     //////////////////////////////////////////////////////////////////////
 
+    void gl_window::set_mouse_mode(gl_window::mouse_drag_action action, LPARAM lParam)
+    {
+        mouse_drag = action;
+
+        auto show = []() {
+            while(ShowCursor(true) < 0) {
+            }
+        };
+
+        auto hide = []() {
+            while(ShowCursor(false) >= 0) {
+            }
+        };
+
+        vec2d pos = pos_from_lparam(lParam);
+
+        switch(action) {
+
+        case mouse_drag_none:
+            zoom_anim = false;
+            show();
+            ReleaseCapture();
+            break;
+
+        case mouse_drag_pan:
+            zoom_anim = false;
+            drag_mouse_start_pos = pos;
+            show();
+            SetCapture(hwnd);
+            break;
+
+        case mouse_drag_zoom:
+            zoom_anim = false;
+            hide();
+            SetCapture(hwnd);
+            drag_mouse_start_pos = pos;
+            break;
+
+        case mouse_drag_zoom_select:
+            zoom_anim = false;
+            show();
+            SetCapture(hwnd);
+            drag_mouse_start_pos = pos;
+            drag_rect = {};
+            break;
+
+        case mouse_drag_maybe_select:
+            zoom_anim = false;
+            show();
+            SetCapture(hwnd);
+            drag_mouse_start_pos = pos;
+            break;
+
+        case mouse_drag_select:
+            zoom_anim = false;
+            show();
+            SetCapture(hwnd);
+            drag_mouse_cur_pos = pos;
+            break;
+        }
+    }
+
+    //////////////////////////////////////////////////////////////////////
+
     LRESULT CALLBACK gl_window::wnd_proc_proxy(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
     {
         extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
@@ -408,20 +479,10 @@ namespace gerber_3d
             //////////////////////////////////////////////////////////////////////
 
         case WM_LBUTTONDOWN: {
-            vec2d mouse_pos = pos_from_lparam(lParam);
             if((GetKeyState(VK_CONTROL) & 0x8000) != 0) {
-                mouse_drag = mouse_drag_zoom_select;
-                zoom_anim = false;
-                drag_mouse_start_pos = mouse_pos;
-                drag_rect = {};
-                drag_rect_raw = {};
-                SetCapture(hwnd);
+                set_mouse_mode(mouse_drag_zoom_select, lParam);
             } else {
-                mouse_drag = mouse_drag_maybe_select;
-                zoom_anim = false;
-                drag_rect = {};
-                drag_mouse_start_pos = mouse_pos;
-                SetCapture(hwnd);
+                set_mouse_mode(mouse_drag_maybe_select, lParam);
             }
         } break;
 
@@ -429,48 +490,42 @@ namespace gerber_3d
 
         case WM_LBUTTONUP: {
             if(mouse_drag == mouse_drag_zoom_select) {
-                vec2d mn = drag_rect.min_pos;
-                vec2d mx = drag_rect.max_pos;
+                rect drag_rect_corrected = correct_aspect_ratio(window_rect.aspect_ratio(), drag_rect, aspect_expand);
+                vec2d mn = drag_rect_corrected.min_pos;
+                vec2d mx = drag_rect_corrected.max_pos;
                 rect d = rect{ mn, mx }.normalize();
                 if(d.width() > 1 && d.height() > 1) {
                     zoom_to_rect({ world_pos_from_window_pos(vec2d{ mn.x, mx.y }), world_pos_from_window_pos(vec2d{ mx.x, mn.y }) });
                 }
+                set_mouse_mode(mouse_drag_none);
+                zoom_anim = true;
+            } else {
+                set_mouse_mode(mouse_drag_none);
             }
-            mouse_drag = mouse_drag_none;
-            ReleaseCapture();
         } break;
 
             //////////////////////////////////////////////////////////////////////
 
         case WM_MBUTTONDOWN:
-            mouse_drag = mouse_drag_zoom;
-            zoom_anim = false;
-            drag_mouse_cur_pos = pos_from_lparam(lParam);
-            drag_mouse_start_pos = drag_mouse_cur_pos;
-            SetCapture(hwnd);
+            set_mouse_mode(mouse_drag_zoom, lParam);
             break;
 
             //////////////////////////////////////////////////////////////////////
 
         case WM_MBUTTONUP:
-            mouse_drag = mouse_drag_none;
-            ReleaseCapture();
+            set_mouse_mode(mouse_drag_none);
             break;
 
             //////////////////////////////////////////////////////////////////////
 
         case WM_RBUTTONDOWN:
-            mouse_drag = mouse_drag_pan;
-            zoom_anim = false;
-            drag_mouse_cur_pos = pos_from_lparam(lParam);
-            SetCapture(hwnd);
+            set_mouse_mode(mouse_drag_pan, lParam);
             break;
 
             //////////////////////////////////////////////////////////////////////
 
         case WM_RBUTTONUP:
-            mouse_drag = mouse_drag_none;
-            ReleaseCapture();
+            set_mouse_mode(mouse_drag_none);
             break;
 
             //////////////////////////////////////////////////////////////////////
@@ -482,35 +537,35 @@ namespace gerber_3d
             case mouse_drag_pan: {
                 vec2d mouse_pos = pos_from_lparam(lParam);
                 vec2d new_mouse_pos = world_pos_from_window_pos(mouse_pos);
-                vec2d old_mouse_pos = world_pos_from_window_pos(drag_mouse_cur_pos);
+                vec2d old_mouse_pos = world_pos_from_window_pos(drag_mouse_start_pos);
                 view_rect = view_rect.offset(new_mouse_pos.subtract(old_mouse_pos).negate());
-                zoom_anim = false;
-                drag_mouse_cur_pos = mouse_pos;
+                drag_mouse_start_pos = mouse_pos;
             } break;
 
             case mouse_drag_zoom: {
                 vec2d mouse_pos = pos_from_lparam(lParam);
-                vec2d d = mouse_pos.subtract(drag_mouse_cur_pos);
+                vec2d d = mouse_pos.subtract(drag_mouse_start_pos);
                 zoom_image(drag_mouse_start_pos, 1.0 + (d.x - d.y) * 0.01);
                 drag_mouse_cur_pos = mouse_pos;
+                POINT screen_pos{ (long)drag_mouse_start_pos.x, (long)drag_mouse_start_pos.y };
+                ClientToScreen(hwnd, &screen_pos);
+                SetCursorPos(screen_pos.x, screen_pos.y);
             } break;
 
             case mouse_drag_zoom_select: {
                 drag_mouse_cur_pos = pos_from_lparam(lParam);
                 if(drag_mouse_cur_pos.subtract(drag_mouse_start_pos).length() > 4) {
-                    drag_rect_raw = rect{ drag_mouse_start_pos, drag_mouse_cur_pos }.normalize();
-                    drag_rect = correct_aspect_ratio(window_rect.aspect_ratio(), drag_rect_raw, aspect_expand);
+                    drag_rect = rect{ drag_mouse_start_pos, drag_mouse_cur_pos }.normalize();
                 }
             } break;
 
             case mouse_drag_maybe_select: {
                 vec2d pos = pos_from_lparam(lParam);
                 if(pos.subtract(drag_mouse_start_pos).length() > drag_select_offset_start_distance) {
-                    mouse_drag = mouse_drag_select;
+                    set_mouse_mode(mouse_drag_select, lParam);
+                    drag_rect = rect{ drag_mouse_start_pos, drag_mouse_cur_pos };
                     // entities_clicked.clear();
                     // highlight_entity = false;
-                    drag_mouse_cur_pos = pos;
-                    drag_rect = rect{ drag_mouse_start_pos, drag_mouse_cur_pos };
                     // select_entities(drag_rect, (GetKeyState(VK_SHIFT) & 0x8000) == 0);
                 }
             } break;
@@ -522,7 +577,7 @@ namespace gerber_3d
             } break;
 
             case mouse_drag_none: {
-                // update mouse world coordinates in a status bar or something here...
+                mouse_world_pos = world_pos_from_window_pos(pos_from_lparam(lParam));
             } break;
 
             default:
@@ -577,8 +632,8 @@ namespace gerber_3d
             drawer->on_finished_loading();
             gerber_layer *layer = new gerber_layer();
             layer->layer = drawer;
-            layer->fill_color = layer_colors[layers.size() % gerber_util::array_length(layer_colors)];
-            layer->clear_color = gl_color::black & 0x00ffffff;
+            layer->fill_color = layer_colors[layers.size() % gerber_util::array_length(layer_colors)] & 0x80ffffff;
+            layer->clear_color = gl_color::clear;
             layer->outline_color = gl_color::white;
             layer->outline = false;
             layer->filename = std::filesystem::path(drawer->gerber_file->filename).filename().string();
@@ -782,6 +837,10 @@ namespace gerber_3d
         io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
         io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
 
+#if defined(IMGUI_HAS_DOCK)
+        io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+#endif
+
         ImGui::StyleColorsDark();
 
         ImGui_ImplWin32_InitForOpenGL(hwnd);
@@ -836,8 +895,6 @@ namespace gerber_3d
 
     void gl_window::ui()
     {
-        static bool show_stats{ false };
-
         auto color_edit_flags = ImGuiColorEditFlags_AlphaBar | ImGuiColorEditFlags_AlphaPreview | ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoTooltip;
 
         bool close_all = false;
@@ -978,13 +1035,14 @@ namespace gerber_3d
             gl_color::float4 color_f(axes_color);
             ImGui::Checkbox("Show axes", &show_axes);
             ImGui::SameLine();
-            if(ImGui::ColorEdit4("Axes", color_f, color_edit_flags)) {
+            if(ImGui::ColorEdit4("", color_f, color_edit_flags)) {
                 axes_color = gl_color::from_floats(color_f);
             }
+            ImGui::SetNextItemWidth(150);
             ImGui::Checkbox("Show extent", &show_extent);
             color_f = extent_color;
             ImGui::SameLine();
-            if(ImGui::ColorEdit4("Extents", color_f, color_edit_flags)) {
+            if(ImGui::ColorEdit4("", color_f, color_edit_flags)) {
                 extent_color = gl_color::from_floats(color_f);
             }
             color_f = background_color;
@@ -999,8 +1057,18 @@ namespace gerber_3d
         if(show_stats) {
             ImGui::Begin("Stats");
             {
-                ImGuiIO &io = ImGui::GetIO();
-                ImGui::Text("(%.1f FPS (%.3f ms)", io.Framerate, 1000.0f / io.Framerate);
+                // ImGuiIO &io = ImGui::GetIO();
+                // ImGui::Text("(%.1f FPS (%.3f ms)", io.Framerate, 1000.0f / io.Framerate);
+                char const *imp_mm = imperial ? "IN" : "MM";
+                if(ImGui::Button(imp_mm)) {
+                    imperial = !imperial;
+                }
+                double scale = 1.0;
+                if(imperial) {
+                    scale = 1.0 / 25.4;
+                }
+                ImGui::Text("X: %14.8f", mouse_world_pos.x * scale);
+                ImGui::Text("Y: %14.8f", mouse_world_pos.y * scale);
             }
             ImGui::End();
         }
@@ -1073,7 +1141,7 @@ namespace gerber_3d
             return;
         }
 
-        
+
         GL_CHECK(glViewport(0, 0, window_width, window_height));
 
         gl_color::float4 back_col(background_color);
@@ -1168,9 +1236,10 @@ namespace gerber_3d
 
         overlay.reset();
         if(mouse_drag == mouse_drag_zoom_select) {
-            overlay.add_rect(drag_rect, 0x80ffff00);
-            overlay.add_rect(drag_rect_raw, 0x800000ff);
-            overlay.add_outline_rect(drag_rect_raw, 0xffffffff);
+            rect drag_rect_corrected = correct_aspect_ratio(window_rect.aspect_ratio(), drag_rect, aspect_expand);
+            overlay.add_rect(drag_rect_corrected, 0x80ffff00);
+            overlay.add_rect(drag_rect, 0x800000ff);
+            overlay.add_outline_rect(drag_rect, 0xffffffff);
         }
 
         vec2d origin = window_pos_from_world_pos({ 0, 0 });
