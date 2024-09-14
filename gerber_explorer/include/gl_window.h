@@ -109,8 +109,6 @@ namespace gerber_3d
 
         void ui(int wide, int high);
 
-        void on_draw_callback();
-
         void select_layer(gerber_layer *l);
 
         void cleanup()
@@ -153,6 +151,8 @@ namespace gerber_3d
 
         bool show_axes{ true };
         bool show_extent{ true };
+
+        bool wireframe{ false };
 
         int multisample_count{ 4 };
         int max_multisamples{ 1 };

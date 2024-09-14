@@ -1119,6 +1119,7 @@ namespace gerber_3d
             if(ImGui::ColorEdit3("Background", color_f, color_edit_flags)) {
                 background_color = gl_color::from_floats(color_f);
             }
+            ImGui::Checkbox("Wireframe", &wireframe);
             ImGui::SetNextItemWidth(100);
             ImGui::SliderInt("Multisamples", &multisample_count, 1, max_multisamples);
         }
@@ -1230,7 +1231,6 @@ namespace gerber_3d
         memcpy(v, quad, 3 * sizeof(gl_vertex_textured));
         GL_CHECK(glUnmapBuffer(GL_ARRAY_BUFFER));
 
-        glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
         glEnable(GL_BLEND);
 
         for(size_t n = layers.size(); n != 0;) {
@@ -1247,7 +1247,15 @@ namespace gerber_3d
                 GL_CHECK(glClearColor(0, 0, 0, 0));
                 GL_CHECK(glClear(GL_COLOR_BUFFER_BIT));
 
+                if(wireframe) {
+                    glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+                } else {
+                    glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+                }
+
                 layer->draw();
+
+                glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 
                 // draw the render texture to the window
 
