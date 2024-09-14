@@ -1083,7 +1083,7 @@ namespace gerber_3d
                 }
                 if(layer->outline) {
                     ImGui::SameLine();
-                    if(ImGui::ColorEdit4("", outline_color_f, color_edit_flags)) {
+                    if(ImGui::ColorEdit4("##outline", outline_color_f, color_edit_flags)) {
                         layer->outline_color = gl_color::from_floats(outline_color_f);
                     }
                 }
@@ -1105,14 +1105,14 @@ namespace gerber_3d
             gl_color::float4 color_f(axes_color);
             ImGui::Checkbox("Show axes", &show_axes);
             ImGui::SameLine();
-            if(ImGui::ColorEdit4("", color_f, color_edit_flags)) {
+            if(ImGui::ColorEdit4("##axes", color_f, color_edit_flags)) {
                 axes_color = gl_color::from_floats(color_f);
             }
             ImGui::SetNextItemWidth(150);
             ImGui::Checkbox("Show extent", &show_extent);
             color_f = extent_color;
             ImGui::SameLine();
-            if(ImGui::ColorEdit4("", color_f, color_edit_flags)) {
+            if(ImGui::ColorEdit4("##extent", color_f, color_edit_flags)) {
                 extent_color = gl_color::from_floats(color_f);
             }
             color_f = background_color;
