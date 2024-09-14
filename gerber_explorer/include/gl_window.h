@@ -62,26 +62,6 @@ namespace gerber_3d
 
         //////////////////////////////////////////////////////////////////////
 
-        struct gerber_entity
-        {
-            int entity_id{};                                     // index into entities
-            int path_id{};                                       // index into gl_drawer->draw_calls for line_offset, line_count
-            int num_paths{};                                     // # of paths in this entity
-            bool fill{};                                         // fill (true) or clear (false)
-            bool selected{};                                     // highlighted entities are selected when mouse released
-
-            gerber_lib::gerber_2d::rect pixel_space_bounds{};    // screen space bounding rectangle
-
-            gerber_entity() = default;
-
-            gerber_entity(int entity_id, int path_id, int num_paths, bool fill)
-                : entity_id(entity_id), path_id(path_id), num_paths(num_paths), fill(fill), pixel_space_bounds{}
-            {
-            }
-        };
-
-        //////////////////////////////////////////////////////////////////////
-
         using vec2d = gerber_lib::gerber_2d::vec2d;
         using rect = gerber_lib::gerber_2d::rect;
         using matrix = gerber_lib::gerber_2d::matrix;
@@ -129,8 +109,6 @@ namespace gerber_3d
 
         void set_mouse_mode(mouse_drag_action action, vec2d const &pos);
         void on_mouse_move(vec2d const &pos);
-
-        std::vector<gerber_entity> entities;
 
         gerber_layer *selected_layer{ nullptr };
 
