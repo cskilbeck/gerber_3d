@@ -206,7 +206,45 @@ namespace gerber_3d
     }
 
     //////////////////////////////////////////////////////////////////////
-    // must pass the names by value here
+
+    bool gl_window::get_open_filenames(std::vector<std::string> &filenames)
+    {
+        // open a file name
+        char filename[MAX_PATH * 20] = {};
+        OPENFILENAME ofn{ 0 };
+        ZeroMemory(&ofn, sizeof(ofn));
+        ofn.lStructSize = sizeof(ofn);
+        ofn.hwndOwner = NULL;
+        ofn.lpstrFile = filename;
+        ofn.lpstrFile[0] = '\0';
+        ofn.nMaxFile = (DWORD)gerber_util::array_length(filename);
+        ofn.lpstrFilter = "All files\0*.*\0";
+        ofn.nFilterIndex = 1;
+        ofn.lpstrFileTitle = NULL;
+        ofn.nMaxFileTitle = 0;
+        ofn.lpstrInitialDir = NULL;
+        ofn.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST | OFN_ALLOWMULTISELECT | OFN_EXPLORER;
+
+        if(GetOpenFileNameA(&ofn)) {
+            int num_files = 1;
+            char const *n = ofn.lpstrFile;
+            std::string first_name{ n };
+            n += strlen(n) + 1;
+            while(*n) {
+                filenames.push_back(std::format("{}\\{}", first_name, std::string{ n }));
+                n += strlen(n) + 1;
+                num_files += 1;
+            }
+            if(num_files == 1) {
+                filenames.push_back(first_name);
+            }
+            return true;
+        }
+        return false;
+    }
+
+    //////////////////////////////////////////////////////////////////////
+    // must pass the names by value here!
 
     void gl_window::load_gerber_files(std::vector<std::string> filenames)
     {
@@ -215,7 +253,7 @@ namespace gerber_3d
             std::vector<gl_drawer *> drawers;
             drawers.resize(50);
             int index = 0;
-            for(auto const s : filenames) {
+            for(auto const &s : filenames) {
                 LOG_DEBUG("LOADING {}", s);
                 threads.push_back(new std::thread(
                     [&](std::string filename, int index) {
@@ -244,6 +282,23 @@ namespace gerber_3d
             }
             PostMessage(hwnd, WM_FIT_TO_WINDOW, 0, 0);
         }).detach();
+    }
+
+    //////////////////////////////////////////////////////////////////////
+
+    vec2d gl_window::world_pos_from_window_pos(vec2d const &p) const
+    {
+        vec2d scale = view_rect.size().divide(window_size);
+        return vec2d{ p.x, window_size.y - p.y }.multiply(scale).add(view_rect.min_pos);
+    }
+
+    //////////////////////////////////////////////////////////////////////
+
+    vec2d gl_window::window_pos_from_world_pos(vec2d const &p) const
+    {
+        vec2d scale = window_size.divide(view_rect.size());
+        vec2d pos = p.subtract(view_rect.min_pos).multiply(scale);
+        return { pos.x, window_size.y - pos.y };
     }
 
     //////////////////////////////////////////////////////////////////////
@@ -298,19 +353,36 @@ namespace gerber_3d
 
     //////////////////////////////////////////////////////////////////////
 
-    vec2d gl_window::world_pos_from_window_pos(vec2d const &p) const
+    void gl_window::update_view_rect()
     {
-        vec2d scale = view_rect.size().divide(window_size);
-        return vec2d{ p.x, window_size.y - p.y }.multiply(scale).add(view_rect.min_pos);
-    }
+        if(zoom_anim) {
 
-    //////////////////////////////////////////////////////////////////////
+            auto lerp = [](double d) {
+                double p = 10;
+                double x = d;
+                double x2 = pow(x, p - 1);
+                double x1 = x2 * x;    // pow(x, p)
+                return 1 - (p * x2 - (p - 1) * x1);
+            };
 
-    vec2d gl_window::window_pos_from_world_pos(vec2d const &p) const
-    {
-        vec2d scale = window_size.divide(view_rect.size());
-        vec2d pos = p.subtract(view_rect.min_pos).multiply(scale);
-        return { pos.x, window_size.y - pos.y };
+            auto now = std::chrono::high_resolution_clock::now();
+            auto remaining_ms = std::chrono::duration_cast<std::chrono::milliseconds>(target_view_time - now).count();
+            if(remaining_ms < 1) {
+                remaining_ms = 0;
+            }
+            double t = (double)remaining_ms / (double)zoom_lerp_time_ms;
+            double d = lerp(t);
+            vec2d dmin = target_view_rect.min_pos.subtract(source_view_rect.min_pos).scale(d);
+            vec2d dmax = target_view_rect.max_pos.subtract(source_view_rect.max_pos).scale(d);
+            view_rect = { source_view_rect.min_pos.add(dmin), source_view_rect.max_pos.add(dmax) };
+            vec2d wv = window_pos_from_world_pos(view_rect.min_pos);
+            vec2d tv = window_pos_from_world_pos(target_view_rect.min_pos);
+            if(wv.subtract(tv).length() <= 1) {
+                LOG_DEBUG("View zoom complete");
+                view_rect = target_view_rect;
+                zoom_anim = false;
+            }
+        }
     }
 
     //////////////////////////////////////////////////////////////////////
@@ -335,64 +407,113 @@ namespace gerber_3d
 
     //////////////////////////////////////////////////////////////////////
 
-    void gl_window::set_mouse_mode(gl_window::mouse_drag_action action, LPARAM lParam)
+    void gl_window::set_mouse_mode(gl_window::mouse_drag_action action, vec2d const &pos)
     {
-        mouse_drag = action;
-
-        auto show = []() {
+        auto show_mouse = []() {
             while(ShowCursor(true) < 0) {
             }
         };
 
-        auto hide = []() {
+        auto hide_mouse = []() {
             while(ShowCursor(false) >= 0) {
             }
         };
 
-        vec2d pos = pos_from_lparam(lParam);
+        auto begin = [&]() {
+            zoom_anim = false;
+            show_mouse();
+            SetCapture(hwnd);
+        };
 
         switch(action) {
 
         case mouse_drag_none:
-            zoom_anim = false;
-            show();
+            zoom_anim = mouse_mode == mouse_drag_zoom_select;
+            show_mouse();
             ReleaseCapture();
             break;
 
         case mouse_drag_pan:
-            zoom_anim = false;
             drag_mouse_start_pos = pos;
-            show();
-            SetCapture(hwnd);
+            begin();
             break;
 
         case mouse_drag_zoom:
             zoom_anim = false;
-            hide();
+            hide_mouse();
             SetCapture(hwnd);
             drag_mouse_start_pos = pos;
             break;
 
         case mouse_drag_zoom_select:
-            zoom_anim = false;
-            show();
-            SetCapture(hwnd);
+            begin();
             drag_mouse_start_pos = pos;
             drag_rect = {};
             break;
 
         case mouse_drag_maybe_select:
-            zoom_anim = false;
-            show();
-            SetCapture(hwnd);
+            begin();
             drag_mouse_start_pos = pos;
             break;
 
         case mouse_drag_select:
-            zoom_anim = false;
-            show();
-            SetCapture(hwnd);
+            begin();
             drag_mouse_cur_pos = pos;
+            drag_rect = rect{ drag_mouse_start_pos, drag_mouse_cur_pos };
+            break;
+        }
+        mouse_mode = action;
+    }
+
+    //////////////////////////////////////////////////////////////////////
+
+    void gl_window::on_mouse_move(vec2d const &mouse_pos)
+    {
+        switch(mouse_mode) {
+
+        case mouse_drag_pan: {
+            vec2d new_mouse_pos = world_pos_from_window_pos(mouse_pos);
+            vec2d old_mouse_pos = world_pos_from_window_pos(drag_mouse_start_pos);
+            view_rect = view_rect.offset(new_mouse_pos.subtract(old_mouse_pos).negate());
+            drag_mouse_start_pos = mouse_pos;
+        } break;
+
+        case mouse_drag_zoom: {
+            vec2d d = mouse_pos.subtract(drag_mouse_start_pos);
+            zoom_image(drag_mouse_start_pos, 1.0 + (d.x - d.y) * 0.01);
+            drag_mouse_cur_pos = mouse_pos;
+            POINT screen_pos{ (long)drag_mouse_start_pos.x, (long)drag_mouse_start_pos.y };
+            ClientToScreen(hwnd, &screen_pos);
+            SetCursorPos(screen_pos.x, screen_pos.y);
+        } break;
+
+        case mouse_drag_zoom_select: {
+            drag_mouse_cur_pos = mouse_pos;
+            if(drag_mouse_cur_pos.subtract(drag_mouse_start_pos).length() > 4) {
+                drag_rect = rect{ drag_mouse_start_pos, drag_mouse_cur_pos }.normalize();
+            }
+        } break;
+
+        case mouse_drag_maybe_select: {
+            if(mouse_pos.subtract(drag_mouse_start_pos).length() > drag_select_offset_start_distance) {
+                set_mouse_mode(mouse_drag_select, mouse_pos);
+                // entities_clicked.clear();
+                // highlight_entity = false;
+                // select_entities(drag_rect, (GetKeyState(VK_SHIFT) & 0x8000) == 0);
+            }
+        } break;
+
+        case mouse_drag_select: {
+            drag_mouse_cur_pos = mouse_pos;
+            drag_rect = rect{ drag_mouse_start_pos, drag_mouse_cur_pos };
+            // select_entities(drag_rect, (GetKeyState(VK_SHIFT) & 0x8000) == 0);
+        } break;
+
+        case mouse_drag_none: {
+            mouse_world_pos = world_pos_from_window_pos(mouse_pos);
+        } break;
+
+        default:
             break;
         }
     }
@@ -437,7 +558,9 @@ namespace gerber_3d
         switch(message) {
 
         case WM_SIZING: {
-            draw();
+            RECT rc;
+            GetClientRect(hwnd, &rc);
+            draw(rc.right, rc.bottom);
             ValidateRect(hwnd, nullptr);
         } break;
 
@@ -480,109 +603,56 @@ namespace gerber_3d
 
         case WM_LBUTTONDOWN: {
             if((GetKeyState(VK_CONTROL) & 0x8000) != 0) {
-                set_mouse_mode(mouse_drag_zoom_select, lParam);
+                set_mouse_mode(mouse_drag_zoom_select, pos_from_lparam(lParam));
             } else {
-                set_mouse_mode(mouse_drag_maybe_select, lParam);
+                set_mouse_mode(mouse_drag_maybe_select, pos_from_lparam(lParam));
             }
         } break;
 
             //////////////////////////////////////////////////////////////////////
 
         case WM_LBUTTONUP: {
-            if(mouse_drag == mouse_drag_zoom_select) {
+            if(mouse_mode == mouse_drag_zoom_select) {
                 rect drag_rect_corrected = correct_aspect_ratio(window_rect.aspect_ratio(), drag_rect, aspect_expand);
                 vec2d mn = drag_rect_corrected.min_pos;
                 vec2d mx = drag_rect_corrected.max_pos;
                 rect d = rect{ mn, mx }.normalize();
-                if(d.width() > 1 && d.height() > 1) {
+                if(d.width() > 2 && d.height() > 2) {
                     zoom_to_rect({ world_pos_from_window_pos(vec2d{ mn.x, mx.y }), world_pos_from_window_pos(vec2d{ mx.x, mn.y }) });
                 }
-                set_mouse_mode(mouse_drag_none);
-                zoom_anim = true;
-            } else {
-                set_mouse_mode(mouse_drag_none);
             }
+            set_mouse_mode(mouse_drag_none, {});
         } break;
 
             //////////////////////////////////////////////////////////////////////
 
         case WM_MBUTTONDOWN:
-            set_mouse_mode(mouse_drag_zoom, lParam);
+            set_mouse_mode(mouse_drag_zoom, pos_from_lparam(lParam));
             break;
 
             //////////////////////////////////////////////////////////////////////
 
         case WM_MBUTTONUP:
-            set_mouse_mode(mouse_drag_none);
+            set_mouse_mode(mouse_drag_none, {});
             break;
 
             //////////////////////////////////////////////////////////////////////
 
         case WM_RBUTTONDOWN:
-            set_mouse_mode(mouse_drag_pan, lParam);
+            set_mouse_mode(mouse_drag_pan, pos_from_lparam(lParam));
             break;
 
             //////////////////////////////////////////////////////////////////////
 
         case WM_RBUTTONUP:
-            set_mouse_mode(mouse_drag_none);
+            set_mouse_mode(mouse_drag_none, {});
             break;
 
             //////////////////////////////////////////////////////////////////////
 
         case WM_MOUSEMOVE:
 
-            switch(mouse_drag) {
-
-            case mouse_drag_pan: {
-                vec2d mouse_pos = pos_from_lparam(lParam);
-                vec2d new_mouse_pos = world_pos_from_window_pos(mouse_pos);
-                vec2d old_mouse_pos = world_pos_from_window_pos(drag_mouse_start_pos);
-                view_rect = view_rect.offset(new_mouse_pos.subtract(old_mouse_pos).negate());
-                drag_mouse_start_pos = mouse_pos;
-            } break;
-
-            case mouse_drag_zoom: {
-                vec2d mouse_pos = pos_from_lparam(lParam);
-                vec2d d = mouse_pos.subtract(drag_mouse_start_pos);
-                zoom_image(drag_mouse_start_pos, 1.0 + (d.x - d.y) * 0.01);
-                drag_mouse_cur_pos = mouse_pos;
-                POINT screen_pos{ (long)drag_mouse_start_pos.x, (long)drag_mouse_start_pos.y };
-                ClientToScreen(hwnd, &screen_pos);
-                SetCursorPos(screen_pos.x, screen_pos.y);
-            } break;
-
-            case mouse_drag_zoom_select: {
-                drag_mouse_cur_pos = pos_from_lparam(lParam);
-                if(drag_mouse_cur_pos.subtract(drag_mouse_start_pos).length() > 4) {
-                    drag_rect = rect{ drag_mouse_start_pos, drag_mouse_cur_pos }.normalize();
-                }
-            } break;
-
-            case mouse_drag_maybe_select: {
-                vec2d pos = pos_from_lparam(lParam);
-                if(pos.subtract(drag_mouse_start_pos).length() > drag_select_offset_start_distance) {
-                    set_mouse_mode(mouse_drag_select, lParam);
-                    drag_rect = rect{ drag_mouse_start_pos, drag_mouse_cur_pos };
-                    // entities_clicked.clear();
-                    // highlight_entity = false;
-                    // select_entities(drag_rect, (GetKeyState(VK_SHIFT) & 0x8000) == 0);
-                }
-            } break;
-
-            case mouse_drag_select: {
-                drag_mouse_cur_pos = pos_from_lparam(lParam);
-                drag_rect = rect{ drag_mouse_start_pos, drag_mouse_cur_pos };
-                // select_entities(drag_rect, (GetKeyState(VK_SHIFT) & 0x8000) == 0);
-            } break;
-
-            case mouse_drag_none: {
-                mouse_world_pos = world_pos_from_window_pos(pos_from_lparam(lParam));
-            } break;
-
-            default:
-                break;
-            }
+            on_mouse_move(pos_from_lparam(lParam));
             break;
 
         case WM_KEYDOWN:
@@ -893,7 +963,7 @@ namespace gerber_3d
 
     //////////////////////////////////////////////////////////////////////
 
-    void gl_window::ui()
+    void gl_window::ui(int wide, int high)
     {
         auto color_edit_flags = ImGuiColorEditFlags_AlphaBar | ImGuiColorEditFlags_AlphaPreview | ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoTooltip;
 
@@ -902,6 +972,7 @@ namespace gerber_3d
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplWin32_NewFrame();
         ImGui::NewFrame();
+
         ImGui::Begin("Gerber Explorer", nullptr, ImGuiWindowFlags_MenuBar);
         if(ImGui::BeginMenuBar()) {
             if(ImGui::BeginMenu("File")) {
@@ -930,10 +1001,9 @@ namespace gerber_3d
             ImGui::EndMenuBar();
         }
 
-        for(int i = 0; i < (int)layers.size(); ++i) {
+        for(size_t i = 0; i < layers.size(); ++i) {
             bool close = false;
             gerber_layer *layer = layers[i];
-            ImGui::PushID(i);
             std::string name = layer->filename.c_str();
             if(layer->selected) {
                 ImGui::PushStyleColor(ImGuiCol_Header, IM_COL32(255, 255, 255, 255));
@@ -941,7 +1011,8 @@ namespace gerber_3d
                 ImGui::PushStyleColor(ImGuiCol_HeaderActive, IM_COL32(255, 255, 255, 255));
                 ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(0, 0, 0, 255));
             }
-            bool node_open = ImGui::TreeNodeEx(name.c_str(), ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_Framed);
+            ImGui::PushID((int)i);
+            bool node_open = ImGui::TreeNodeEx(name.c_str(), ImGuiTreeNodeFlags_Framed | ImGuiTreeNodeFlags_OpenOnArrow);
             if(layer->selected) {
                 ImGui::PopStyleColor();
                 ImGui::PopStyleColor();
@@ -1027,11 +1098,10 @@ namespace gerber_3d
                 layers.erase(layers.begin() + i);
             }
         }
-
         ImGui::End();
 
-        if(show_options) {
-            ImGui::Begin("Options", &show_options);
+        ImGui::Begin("Options", &show_options);
+        {
             gl_color::float4 color_f(axes_color);
             ImGui::Checkbox("Show axes", &show_axes);
             ImGui::SameLine();
@@ -1051,27 +1121,26 @@ namespace gerber_3d
             }
             ImGui::SetNextItemWidth(100);
             ImGui::SliderInt("Multisamples", &multisample_count, 1, max_multisamples);
-            ImGui::End();
         }
+        ImGui::End();
 
-        if(show_stats) {
-            ImGui::Begin("Stats");
-            {
-                // ImGuiIO &io = ImGui::GetIO();
-                // ImGui::Text("(%.1f FPS (%.3f ms)", io.Framerate, 1000.0f / io.Framerate);
-                char const *imp_mm = imperial ? "IN" : "MM";
-                if(ImGui::Button(imp_mm)) {
-                    imperial = !imperial;
-                }
-                double scale = 1.0;
-                if(imperial) {
-                    scale = 1.0 / 25.4;
-                }
-                ImGui::Text("X: %14.8f", mouse_world_pos.x * scale);
-                ImGui::Text("Y: %14.8f", mouse_world_pos.y * scale);
+        ImGui::Begin("Stats", &show_stats);
+        {
+            // ImGuiIO &io = ImGui::GetIO();
+            // ImGui::Text("(%.1f FPS (%.3f ms)", io.Framerate, 1000.0f / io.Framerate);
+            char const *imp_mm = imperial ? "IN" : "MM";
+            if(ImGui::Button(imp_mm)) {
+                imperial = !imperial;
             }
-            ImGui::End();
+            double scale = 1.0;
+            if(imperial) {
+                scale = 1.0 / 25.4;
+            }
+            ImGui::Text("X: %14.8f", mouse_world_pos.x * scale);
+            ImGui::Text("Y: %14.8f", mouse_world_pos.y * scale);
         }
+        ImGui::End();
+
         ImGui::Render();
 
         if(close_all) {
@@ -1084,46 +1153,10 @@ namespace gerber_3d
 
     //////////////////////////////////////////////////////////////////////
 
-    void gl_window::update_view_rect()
+    void gl_window::draw(int width_pixels, int height_pixels)
     {
-        if(zoom_anim) {
-
-            auto lerp = [](double d) {
-                double p = 10;
-                double x = d;
-                double x2 = pow(x, p - 1);
-                double x1 = x2 * x;    // pow(x, p)
-                return 1 - (p * x2 - (p - 1) * x1);
-            };
-
-            auto now = std::chrono::high_resolution_clock::now();
-            auto remaining_ms = std::chrono::duration_cast<std::chrono::milliseconds>(target_view_time - now).count();
-            if(remaining_ms < 1) {
-                remaining_ms = 0;
-            }
-            double t = (double)remaining_ms / (double)zoom_lerp_time_ms;
-            double d = lerp(t);
-            vec2d dmin = target_view_rect.min_pos.subtract(source_view_rect.min_pos).scale(d);
-            vec2d dmax = target_view_rect.max_pos.subtract(source_view_rect.max_pos).scale(d);
-            view_rect = { source_view_rect.min_pos.add(dmin), source_view_rect.max_pos.add(dmax) };
-            vec2d wv = window_pos_from_world_pos(view_rect.min_pos);
-            vec2d tv = window_pos_from_world_pos(target_view_rect.min_pos);
-            if(wv.subtract(tv).length() <= 1) {
-                LOG_DEBUG("View zoom complete");
-                view_rect = target_view_rect;
-                zoom_anim = false;
-            }
-        }
-    }
-
-    //////////////////////////////////////////////////////////////////////
-
-    void gl_window::draw()
-    {
-        RECT rc;
-        GetClientRect(hwnd, &rc);
-        window_width = rc.right;
-        window_height = rc.bottom;
+        window_width = width_pixels;
+        window_height = height_pixels;
 
         if(overlay.vertex_array.vbo_id == 0) {
             return;
@@ -1135,13 +1168,25 @@ namespace gerber_3d
 
         GL_CHECK(glBindFramebuffer(GL_FRAMEBUFFER, 0));
 
-        ui();
+        ui(width_pixels, height_pixels);
 
         if(!IsWindowVisible(hwnd)) {
             return;
         }
 
+        render();
 
+        // Draw ImGui on top of everything else
+
+        ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+
+        SwapBuffers(window_dc);
+    }
+
+    //////////////////////////////////////////////////////////////////////
+
+    void gl_window::render()
+    {
         GL_CHECK(glViewport(0, 0, window_width, window_height));
 
         gl_color::float4 back_col(background_color);
@@ -1235,7 +1280,7 @@ namespace gerber_3d
         // create overlay drawlist (axes, extents etc)
 
         overlay.reset();
-        if(mouse_drag == mouse_drag_zoom_select) {
+        if(mouse_mode == mouse_drag_zoom_select) {
             rect drag_rect_corrected = correct_aspect_ratio(window_rect.aspect_ratio(), drag_rect, aspect_expand);
             overlay.add_rect(drag_rect_corrected, 0x80ffff00);
             overlay.add_rect(drag_rect, 0x800000ff);
@@ -1256,6 +1301,16 @@ namespace gerber_3d
             overlay.add_outline_rect(s, extent_color);
         }
 
+        if(mouse_mode == mouse_drag_select) {
+            rect f{ drag_mouse_start_pos, drag_mouse_cur_pos };
+            uint32_t color = 0x60ff8020;
+            if(f.min_pos.x > f.max_pos.x) {
+                color = 0x6080ff20;
+            }
+            overlay.add_rect(f, color);
+            overlay.add_outline_rect(f, 0xffffffff);
+        }
+
         // draw overlay
 
         color_program.use();
@@ -1263,50 +1318,6 @@ namespace gerber_3d
         GL_CHECK(glUniformMatrix4fv(color_program.transform_location, 1, true, screen_matrix));
 
         overlay.draw();
-
-        // Draw ImGui on top of everything else
-
-        ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-
-        SwapBuffers(window_dc);
-    }
-
-    //////////////////////////////////////////////////////////////////////
-
-    bool gl_window::get_open_filenames(std::vector<std::string> &filenames)
-    {
-        // open a file name
-        char filename[MAX_PATH * 20] = {};
-        OPENFILENAME ofn{ 0 };
-        ZeroMemory(&ofn, sizeof(ofn));
-        ofn.lStructSize = sizeof(ofn);
-        ofn.hwndOwner = NULL;
-        ofn.lpstrFile = filename;
-        ofn.lpstrFile[0] = '\0';
-        ofn.nMaxFile = (DWORD)gerber_util::array_length(filename);
-        ofn.lpstrFilter = "All files\0*.*\0";
-        ofn.nFilterIndex = 1;
-        ofn.lpstrFileTitle = NULL;
-        ofn.nMaxFileTitle = 0;
-        ofn.lpstrInitialDir = NULL;
-        ofn.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST | OFN_ALLOWMULTISELECT | OFN_EXPLORER;
-
-        if(GetOpenFileNameA(&ofn)) {
-            int num_files = 1;
-            char const *n = ofn.lpstrFile;
-            std::string first_name{ n };
-            n += strlen(n) + 1;
-            while(*n) {
-                filenames.push_back(std::format("{}\\{}", first_name, std::string{ n }));
-                n += strlen(n) + 1;
-                num_files += 1;
-            }
-            if(num_files == 1) {
-                filenames.push_back(first_name);
-            }
-            return true;
-        }
-        return false;
     }
 
 }    // namespace gerber_3d

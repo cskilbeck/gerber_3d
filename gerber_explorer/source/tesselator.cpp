@@ -44,11 +44,58 @@ void tesselator::clear()
 
 //////////////////////////////////////////////////////////////////////
 
+void tesselator::begin_callback(GLenum type, GLvoid *userdata)
+{
+    ((tesselator *)userdata)->on_begin(type);
+}
+
+//////////////////////////////////////////////////////////////////////
+
+void tesselator::vertex_callback(GLvoid *vertex, GLvoid *userdata)
+{
+    ((tesselator *)userdata)->on_vertex(vertex);
+}
+
+//////////////////////////////////////////////////////////////////////
+
+void tesselator::combine_callback(GLdouble coords[3], void *d[4], GLfloat w[4], void **dataOut, GLvoid *userdata)
+{
+    vert v((float)coords[0], (float)coords[1]);
+    ((tesselator *)userdata)->on_combine(v, (vert **)dataOut);
+}
+
+//////////////////////////////////////////////////////////////////////
+
+void tesselator::end_callback(GLvoid *userdata)
+{
+    ((tesselator *)userdata)->on_end();
+}
+
+//////////////////////////////////////////////////////////////////////
+
+void tesselator::error_callback(GLenum error, GLvoid *userdata)
+{
+    ((tesselator *)userdata)->on_error(error);
+}
+
+//////////////////////////////////////////////////////////////////////
+
 void tesselator::on_vertex(GLvoid *vertex)
 {
     draw_calls.back().count += 1;
     GLuint index = (GLuint)((vert *)vertex - vertices.data());
     indices.push_back(index);
+}
+
+//////////////////////////////////////////////////////////////////////
+
+void tesselator::on_combine(vert vertex, vert **dataOut)
+{
+    vertices.push_back(vertex);
+    draw_calls.back().count += 1;
+    GLuint index = (GLuint)(vertices.size() - 1);
+    indices.push_back(index);
+    *dataOut = &vertices[index];
 }
 
 //////////////////////////////////////////////////////////////////////
@@ -68,34 +115,6 @@ void tesselator::on_end()
 
 void tesselator::on_error(GLenum error)
 {
-}
-
-//////////////////////////////////////////////////////////////////////
-
-void tesselator::begin_callback(GLenum type, GLvoid *userdata)
-{
-    ((tesselator *)userdata)->on_begin(type);
-}
-
-//////////////////////////////////////////////////////////////////////
-
-void tesselator::vertex_callback(GLvoid *vertex, GLvoid *userdata)
-{
-    ((tesselator *)userdata)->on_vertex(vertex);
-}
-
-//////////////////////////////////////////////////////////////////////
-
-void tesselator::end_callback(GLvoid *userdata)
-{
-    ((tesselator *)userdata)->on_end();
-}
-
-//////////////////////////////////////////////////////////////////////
-
-void tesselator::error_callback(GLenum error, GLvoid *userdata)
-{
-    ((tesselator *)userdata)->on_error(error);
 }
 
 //////////////////////////////////////////////////////////////////////
@@ -124,8 +143,9 @@ void tesselator::append(vec2d const *points, int num_points, uint32_t flags)
 
     GLUtesselator *tess = gluNewTess();
 
-    gluTessCallback(tess, GLU_TESS_VERTEX_DATA, (GLvoid(CALLBACK *)())vertex_callback);
     gluTessCallback(tess, GLU_TESS_BEGIN_DATA, (GLvoid(CALLBACK *)())begin_callback);
+    gluTessCallback(tess, GLU_TESS_VERTEX_DATA, (GLvoid(CALLBACK *)())vertex_callback);
+    gluTessCallback(tess, GLU_TESS_COMBINE_DATA, (GLvoid(CALLBACK *)())combine_callback);
     gluTessCallback(tess, GLU_TESS_END_DATA, (GLvoid(CALLBACK *)())end_callback);
     gluTessCallback(tess, GLU_TESS_ERROR_DATA, (GLvoid(CALLBACK *)())error_callback);
     gluTessCallback(tess, GLU_TESS_EDGE_FLAG_DATA, (GLvoid(CALLBACK *)())edge_flag_callback);

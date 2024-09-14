@@ -59,6 +59,8 @@ int main(int argc, char **argv)
             ::Sleep(10);
             continue;
         }
-        gl.draw();
+        RECT rc;
+        GetClientRect(gl.hwnd, &rc);
+        gl.draw(rc.right, rc.bottom);
     }
 }

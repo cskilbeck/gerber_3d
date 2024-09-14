@@ -103,9 +103,13 @@ namespace gerber_3d
         void load_gerber_files(std::vector<std::string> filenames);
 
         void update_view_rect();
-        void draw();
+        void draw(int width_pixels, int height_pixels);
 
-        void ui();
+        void render();
+
+        void ui(int wide, int high);
+
+        void on_draw_callback();
 
         void select_layer(gerber_layer *l);
 
@@ -125,7 +129,8 @@ namespace gerber_3d
             mouse_drag_select
         };
 
-        void set_mouse_mode(mouse_drag_action action, LPARAM lParam = 0);
+        void set_mouse_mode(mouse_drag_action action, vec2d const &pos);
+        void on_mouse_move(vec2d const &pos);
 
         std::vector<gerber_entity> entities;
 
@@ -133,7 +138,7 @@ namespace gerber_3d
 
         std::vector<gerber_layer *> layers;
 
-        mouse_drag_action mouse_drag{};
+        mouse_drag_action mouse_mode{};
 
         vec2d drag_mouse_cur_pos{};
         vec2d drag_mouse_start_pos{};

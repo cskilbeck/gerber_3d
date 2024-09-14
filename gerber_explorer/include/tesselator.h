@@ -54,13 +54,15 @@ struct tesselator
     //////////////////////////////////////////////////////////////////////
     // internals for libglu tesselator
 
-    void on_vertex(GLvoid *vertex);
     void on_begin(GLenum type);
+    void on_vertex(GLvoid *vertex);
+    void on_combine(vert vertex, vert **dataOut);
     void on_end();
     void on_error(GLenum error);
 
     static void begin_callback(GLenum type, GLvoid *userdata);
     static void vertex_callback(GLvoid *vertex, GLvoid *userdata);
+    static void combine_callback(GLdouble coords[3], void *d[4], GLfloat w[4], void **dataOut, GLvoid *userdata);
     static void end_callback(GLvoid *userdata);
     static void error_callback(GLenum error, GLvoid *userdata);
     static void edge_flag_callback(GLvoid *userdata);
