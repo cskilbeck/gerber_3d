@@ -60,7 +60,9 @@ namespace gerber_3d
     struct gl_render_target
     {
         GLuint fbo{};
-        GLuint texture_id{};
+
+        std::vector<GLuint> texture_ids{};
+        GLuint num_slots{};
 
         int width{};
         int height{};
@@ -68,9 +70,9 @@ namespace gerber_3d
 
         gl_render_target() = default;
 
-        int init(GLuint new_width, GLuint new_height, GLuint multisample_count);
-        void activate() const;
-        void bind();
+        int init(GLuint new_width, GLuint new_height, GLuint multisample_count, GLuint slots);
+        void bind_framebuffer() const;
+        void bind_textures() const;
         void cleanup();
     };
 
@@ -87,6 +89,18 @@ namespace gerber_3d
     };
 
     //////////////////////////////////////////////////////////////////////
+    // for drawing layers
+
+    struct gl_layer_program : gl_program
+    {
+        GLuint cover_location{};
+
+        int init() override;
+
+        void set_color(uint32_t cover) const;
+    };
+
+    //////////////////////////////////////////////////////////////////////
     // color per vertex
 
     struct gl_color_program : gl_program
@@ -99,11 +113,13 @@ namespace gerber_3d
 
     struct gl_textured_program : gl_program
     {
-        GLuint sampler_location;
-        GLuint color_r_location;
-        GLuint color_g_location;
-        GLuint color_b_location;
+        GLuint red_color_uniform;
+        GLuint green_color_uniform;
+        GLuint blue_color_uniform;
+        GLuint alpha_uniform;
+        GLuint cover_sampler;
         GLuint num_samples_uniform{};
+
         int init() override;
     };
 
@@ -188,9 +204,9 @@ namespace gerber_3d
         gl_texture() = default;
 
         int init(GLuint w, GLuint h, uint32_t *data = nullptr);
-        void cleanup();
+        int bind() const;
         int update(uint32_t *data);
-        int activate(GLuint slot) const;
+        void cleanup();
     };
 
     //////////////////////////////////////////////////////////////////////

@@ -29,6 +29,7 @@
 namespace gerber_3d
 {
     struct gl_drawer;
+    struct tesselator_entity;
 
     //////////////////////////////////////////////////////////////////////
 
@@ -47,12 +48,15 @@ namespace gerber_3d
             bool fill{ true };
             bool expanded{ false };
             bool selected{ false };
+            int alpha{ 255 };
             std::string filename;
             uint32_t fill_color;
             uint32_t clear_color;
             uint32_t outline_color;
 
-            void draw(bool wireframe);
+            std::list<tesselator_entity const *> hovered_entities;
+
+            void draw(bool wireframe, float outline_thickness);
 
             bool operator<(gerber_layer const &other)
             {
@@ -135,19 +139,25 @@ namespace gerber_3d
         int multisample_count{ 4 };
         int max_multisamples{ 1 };
 
+        float outline_thickness{ 3 };
+
         bool window_size_valid{ false };
+
+        bool flip_x{ false };
+        bool flip_y{ false };
 
         uint32_t axes_color{ 0x60ffffff };
         uint32_t extent_color{ 0xC000ffff };
         uint32_t background_color{ 0xff602010 };
 
         gl_solid_program solid_program{};
+        gl_layer_program layer_program{};
         gl_color_program color_program{};
         gl_textured_program textured_program{};
 
         gl_drawlist overlay{};
 
-        gl_render_target render_target{};
+        gl_render_target my_target{};
 
         gl_vertex_array_textured fullscreen_blit_verts;
 

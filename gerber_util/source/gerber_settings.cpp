@@ -111,6 +111,18 @@ namespace gerber_util
 
     //////////////////////////////////////////////////////////////////////
 
+    bool load_float(std::string const &name, float &value)
+    {
+        std::string d;
+        if(load_string(name, d)) {
+            value = (float)strtod(d.c_str(), nullptr);
+            return true;
+        }
+        return false;
+    }
+
+    //////////////////////////////////////////////////////////////////////
+
     bool load_bool(std::string const &name, bool &value)
     {
         std::string d;
@@ -138,6 +150,13 @@ namespace gerber_util
     //////////////////////////////////////////////////////////////////////
 
     bool save_double(std::string const &name, double value)
+    {
+        return save_string(name, std::format("{}", value));
+    }
+
+    //////////////////////////////////////////////////////////////////////
+
+    bool save_float(std::string const &name, float value)
     {
         return save_string(name, std::format("{}", value));
     }

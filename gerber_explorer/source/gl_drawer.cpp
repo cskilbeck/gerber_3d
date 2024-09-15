@@ -155,7 +155,7 @@ namespace gerber_3d
 
     //////////////////////////////////////////////////////////////////////
 
-    void gl_drawer::draw(bool fill, uint32_t fill_color, uint32_t clear_color, bool outline, uint32_t outline_color, bool wireframe)
+    void gl_drawer::draw(bool fill, bool outline, bool wireframe, float outline_thickness)
     {
         program->use();
         vertex_array.activate();
@@ -164,10 +164,19 @@ namespace gerber_3d
         glBlendEquationSeparate(GL_FUNC_ADD, GL_FUNC_ADD);
         glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
+        uint32_t constexpr fill_cover = 0xff0000ff;
+        uint32_t constexpr clear_cover = 0xff00ff00;
+        uint32_t constexpr outline_cover = 0xffff0000;
+
         for(auto const &e : tesselator.entities) {
             if(fill) {
                 glPolygonMode(GL_FRONT_AND_BACK, wireframe ? GL_LINE : GL_FILL);
-                program->set_color(e.flags & 1 ? 0xff00ff00 : 0xff0000ff);    // green is cleared sections, red is filled sections
+                glLineWidth(1.0f);
+                if(e.flags & 1) {
+                    program->set_color(clear_cover);
+                } else {
+                    program->set_color(fill_cover);
+                }
                 int end = e.num_fills + e.first_fill;
                 for(int i = e.first_fill; i < end; ++i) {
                     tesselator_span const &s = tesselator.fills[i];
@@ -176,7 +185,8 @@ namespace gerber_3d
             }
             if(outline) {
                 glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-                program->set_color(0xffff0000);    // outlines are blue
+                glLineWidth(outline_thickness);
+                program->set_color(outline_cover);
                 int end = e.num_outlines + e.first_outline;
                 for(int i = e.first_outline; i < end; ++i) {
                     tesselator_span const &s = tesselator.boundaries[i];

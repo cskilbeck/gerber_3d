@@ -190,6 +190,32 @@ namespace gerber_lib
 
             //////////////////////////////////////////////////////////////////////
 
+            bool is_empty_rect()
+            {
+                vec2d const s = size();
+                return s.x == 0 || s.y == 0;
+            }
+
+            //////////////////////////////////////////////////////////////////////
+
+            void expand_to_contain(vec2d const &p)
+            {
+                if(p.x < min_pos.x) {
+                    min_pos.x = p.x;
+                }
+                if(p.y < min_pos.y) {
+                    min_pos.y = p.y;
+                }
+                if(p.x > max_pos.x) {
+                    max_pos.x = p.x;
+                }
+                if(p.y > max_pos.y) {
+                    max_pos.y = p.y;
+                }
+            }
+
+            //////////////////////////////////////////////////////////////////////
+
             rect union_with(rect const &o) const;
 
             //////////////////////////////////////////////////////////////////////
@@ -254,6 +280,35 @@ namespace gerber_lib
         //////////////////////////////////////////////////////////////////////
 
         void get_arc_extents(vec2d const &center, double radius, double start_degrees, double end_degrees, rect &extent);
+
+        //////////////////////////////////////////////////////////////////////
+
+        template <typename T> bool is_point_in_polygon(std::vector<T> const &points, size_t offset, size_t len, T const &p)
+        {
+            bool inside = false;
+
+            if(len >= 3) {
+
+                size_t e = offset + len;
+
+                for(size_t i = offset, j = e; i < len; j = i++) {
+
+                    T const &a = points[i];
+                    T const &b = points[j];
+
+                    // if the line straddles the point in the horizontal and vertical directions
+                    if((a.y > p.y) != (b.y > p.y) && (a.x > p.x) != (b.x > p.x)) {
+
+                        // check if a horizontal line from the point crosses the line
+                        if((p.x < (b.x - a.x) * (p.y - a.y) / (b.y - a.y) + a.x)) {
+
+                            inside = !inside;
+                        }
+                    }
+                }
+            }
+            return inside;
+        }
 
     }    // namespace gerber_2d
 

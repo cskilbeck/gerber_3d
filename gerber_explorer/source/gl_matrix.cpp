@@ -1,4 +1,5 @@
 #include "gl_matrix.h"
+#include <string.h>
 
 namespace gerber_3d
 {
@@ -81,13 +82,14 @@ namespace gerber_3d
 
     void matrix_multiply(gl_matrix const a, gl_matrix const b, gl_matrix out)
     {
+        gl_matrix t;
         for(int i = 0; i < 16; i += 4) {
-            out[i + 0] = a[i] * b[0] + a[i + 1] * b[4] + a[i + 2] * b[8] + a[i + 3] * b[12];
-            out[i + 1] = a[i] * b[1] + a[i + 1] * b[5] + a[i + 2] * b[9] + a[i + 3] * b[13];
-            out[i + 2] = a[i] * b[2] + a[i + 1] * b[6] + a[i + 2] * b[10] + a[i + 3] * b[14];
-            out[i + 3] = a[i] * b[3] + a[i + 1] * b[7] + a[i + 2] * b[11] + a[i + 3] * b[15];
+            t[i + 0] = a[i] * b[0] + a[i + 1] * b[4] + a[i + 2] * b[8] + a[i + 3] * b[12];
+            t[i + 1] = a[i] * b[1] + a[i + 1] * b[5] + a[i + 2] * b[9] + a[i + 3] * b[13];
+            t[i + 2] = a[i] * b[2] + a[i + 1] * b[6] + a[i + 2] * b[10] + a[i + 3] * b[14];
+            t[i + 3] = a[i] * b[3] + a[i + 1] * b[7] + a[i + 2] * b[11] + a[i + 3] * b[15];
         }
+        memcpy(out, t, sizeof(gl_matrix));
     }
 
-
-}
+}    // namespace gerber_3d

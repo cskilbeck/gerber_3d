@@ -35,6 +35,8 @@
 
 LOG_CONTEXT("gl_window", info);
 
+#define OFFSCREEN_LAYER_DRAW
+
 namespace
 {
     //////////////////////////////////////////////////////////////////////
@@ -52,7 +54,7 @@ namespace
 
     double const drag_select_offset_start_distance = 16;
 
-    uint32_t layer_colors[] = { gl_color::white,      gl_color::green,         gl_color::dark_cyan,
+    uint32_t layer_colors[] = { gl_color::yellow,      gl_color::green,         gl_color::dark_cyan,
                                 gl_color::lime_green, gl_color::antique_white, gl_color::corn_flower_blue,
                                 gl_color::gold };
 
@@ -94,19 +96,7 @@ namespace
 
         make_scale(scale, (float)(window.width() / view.width()), (float)(window.height() / view.height()));
         make_translate(origin, -(float)view.min_pos.x, -(float)view.min_pos.y);
-
         matrix_multiply(scale, origin, result);
-    }
-
-    //////////////////////////////////////////////////////////////////////
-
-    bool is_clockwise(std::vector<vec2d> const &points)
-    {
-        double t = 0;
-        for(size_t i = 0, j = points.size() - 1; i < points.size(); j = i++) {
-            t += points[i].x * points[j].y - points[i].y * points[j].x;
-        }
-        return t >= 0;
     }
 
     //////////////////////////////////////////////////////////////////////
@@ -164,6 +154,8 @@ namespace gerber_3d
 
         clear_settings();
 
+        save_bool("flip_x", flip_x);
+        save_bool("flip_y", flip_y);
         save_bool("show_axes", show_axes);
         save_bool("show_extent", show_extent);
         save_bool("show_stats", show_stats);
@@ -171,7 +163,8 @@ namespace gerber_3d
         save_bool("wireframe", wireframe);
         save_uint("background_color", background_color);
         save_int("multisample_count", multisample_count);
-
+        save_float("outline_thickness", outline_thickness);
+        
         int index = 0;
         for(auto const layer : layers) {
             save_string(std::format("file_{}", index), layer->layer->gerber_file->filename);
@@ -188,6 +181,8 @@ namespace gerber_3d
     {
         using namespace gerber_util;
 
+        load_bool("flip_x", flip_x);
+        load_bool("flip_y", flip_y);
         load_bool("show_axes", show_axes);
         load_bool("show_extent", show_extent);
         load_bool("show_stats", show_stats);
@@ -195,6 +190,7 @@ namespace gerber_3d
         load_bool("wireframe", wireframe);
         load_uint("background_color", background_color);
         load_int("multisample_count", multisample_count);
+        load_float("outline_thickness", outline_thickness);
 
         std::vector<std::string> names;
         for(int index = 0; index < 50; ++index) {
@@ -251,31 +247,33 @@ namespace gerber_3d
     void gl_window::load_gerber_files(std::vector<std::string> filenames)
     {
         std::thread([=]() {
-            std::vector<std::thread *> threads;
+            std::vector<std::thread> threads;
             std::vector<gl_drawer *> drawers;
-            drawers.resize(50);
+            drawers.resize(100);
             int index = 0;
             for(auto const &s : filenames) {
                 LOG_DEBUG("LOADING {}", s);
-                threads.push_back(new std::thread(
+                threads.emplace_back(
                     [&](std::string filename, int index) {
                         gerber *g = new gerber();
                         if(g->parse_file(filename.c_str()) == ok) {
                             gl_drawer *drawer = new gl_drawer();
                             drawers[index] = drawer;
-                            drawer->program = &solid_program;
+                            drawer->program = &layer_program;
                             drawer->set_gerber(g);
                         }
                     },
-                    s, index));
-                ++index;
+                    s, index);
+                if(++index == drawers.size()) {
+                    LOG_WARNING("Can't load > 100 files at once! Stopping...");
+                    break;
+                }
             }
             LOG_DEBUG("{} threads", threads.size());
             int id = 0;
-            for(auto thread : threads) {
+            for(auto &thread : threads) {
                 LOG_DEBUG("Joining thread {}", id++);
-                thread->join();
-                delete thread;
+                thread.join();
             }
             threads.clear();
             for(int i = 0; i < index; ++i) {
@@ -402,9 +400,14 @@ namespace gerber_3d
 
     //////////////////////////////////////////////////////////////////////
 
-    void gl_window::gerber_layer::draw(bool wireframe)
+    void gl_window::gerber_layer::draw(bool wireframe, float outline_thickness)
     {
+#if defined(OFFSCREEN_LAYER_DRAW)
+        layer->draw(fill, outline, wireframe, outline_thickness);
+        // layer->draw(fill, gl_color::red, gl_color::green, outline, gl_color::blue, wireframe);
+#else
         layer->draw(fill, fill_color, clear_color, outline, outline_color, wireframe);
+#endif
     }
 
     //////////////////////////////////////////////////////////////////////
@@ -513,6 +516,12 @@ namespace gerber_3d
 
         case mouse_drag_none: {
             mouse_world_pos = world_pos_from_window_pos(mouse_pos);
+            if((GetKeyState('H') & 0x8000) != 0) {
+                for(auto const &l : layers) {
+                    l->layer->tesselator.pick_entities(mouse_world_pos, l->hovered_entities);
+                }
+            }
+
         } break;
 
         default:
@@ -705,10 +714,10 @@ namespace gerber_3d
                 drawer->on_finished_loading();
                 gerber_layer *layer = new gerber_layer();
                 layer->layer = drawer;
-                layer->fill_color = layer_colors[layers.size() % gerber_util::array_length(layer_colors)] & 0x80ffffff;
-                layer->clear_color = gl_color::clear;
-                layer->outline_color = gl_color::white;
-                layer->outline = false;
+                layer->fill_color = layer_colors[layers.size() % gerber_util::array_length(layer_colors)];
+                layer->clear_color = gl_color::cyan;
+                layer->outline_color = gl_color::magenta;
+                layer->outline = true;
                 layer->filename = std::filesystem::path(drawer->gerber_file->filename).filename().string();
                 layers.push_back(layer);
             }
@@ -929,23 +938,23 @@ namespace gerber_3d
         // setup shaders
 
         if(solid_program.init() != 0) {
-            LOG_ERROR("solid_program.init failed - exiting");
+            return -13;
+        }
+
+        if(layer_program.init() != 0) {
             return -13;
         }
 
         if(color_program.init() != 0) {
-            LOG_ERROR("color_program.init failed - exiting");
-            return -14;
+            return -13;
         }
 
         if(textured_program.init() != 0) {
-            LOG_ERROR("textured_program.init failed - exiting");
-            return -15;
+            return -13;
         }
 
         if(overlay.init(color_program) != 0) {
-            LOG_ERROR("overlay.init failed");
-            return -16;
+            return -13;
         }
 
         fullscreen_blit_verts.init(textured_program, 3);
@@ -987,6 +996,7 @@ namespace gerber_3d
                 ImGui::MenuItem("Options", nullptr, &show_options);
                 if(ImGui::MenuItem("Close all", nullptr, nullptr)) {
                     close_all = true;
+                    selected_layer = nullptr;
                 }
                 ImGui::Separator();
                 if(ImGui::MenuItem("Exit", "Esc", nullptr)) {
@@ -1062,6 +1072,7 @@ namespace gerber_3d
                     close = true;
                 }
                 ImGui::PopStyleVar();
+                ImGui::SliderInt("Alpha", &layer->alpha, 0, 255, "%d", ImGuiSliderFlags_AlwaysClamp);
                 gl_color::float4 fill_color_f(layer->fill_color);
                 gl_color::float4 clear_color_f(layer->clear_color);
                 gl_color::float4 outline_color_f(layer->outline_color);
@@ -1112,6 +1123,10 @@ namespace gerber_3d
             if(ImGui::ColorEdit4("##axes", color_f, color_edit_flags)) {
                 axes_color = gl_color::from_floats(color_f);
             }
+
+            ImGui::Checkbox("Flip X", &flip_x);
+            ImGui::SameLine();
+            ImGui::Checkbox("Flip Y", &flip_y);
             ImGui::SetNextItemWidth(150);
             ImGui::Checkbox("Show extent", &show_extent);
             color_f = extent_color;
@@ -1126,6 +1141,8 @@ namespace gerber_3d
             ImGui::Checkbox("Wireframe", &wireframe);
             ImGui::SetNextItemWidth(100);
             ImGui::SliderInt("Multisamples", &multisample_count, 1, max_multisamples);
+            ImGui::SliderFloat("Outline", &outline_thickness, 1.0f, 8.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+
         }
         ImGui::End();
 
@@ -1195,15 +1212,14 @@ namespace gerber_3d
         GL_CHECK(glViewport(0, 0, window_width, window_height));
 
         gl_color::float4 back_col(background_color);
-
         GL_CHECK(glClearColor(back_col[0], back_col[1], back_col[2], back_col[3]));
         GL_CHECK(glClear(GL_COLOR_BUFFER_BIT));
 
         // setup gl viewport and transform matrix
 
-        if(render_target.width != window_width || render_target.height != window_height || render_target.num_samples != multisample_count) {
-            render_target.cleanup();
-            render_target.init(window_width, window_height, multisample_count);
+        if(my_target.width != window_width || my_target.height != window_height || my_target.num_samples != multisample_count) {
+            my_target.cleanup();
+            my_target.init(window_width, window_height, multisample_count, 1);
         }
 
         // draw the gerber layers
@@ -1216,17 +1232,19 @@ namespace gerber_3d
         gl_matrix world_transform_matrix;
         gl_matrix screen_matrix;
 
-        // make a 1:1 screen matrix
+        // make a 1:1 screen matrix with origin in top left
 
         make_ortho(projection_matrix_invert_y, window_width, -window_height);
         make_translate(view_matrix, 0, (float)-window_size.y);
         matrix_multiply(projection_matrix_invert_y, view_matrix, screen_matrix);
 
-        // make world to window matrix
+        // make world to window matrix with origin in bottom left
 
         make_ortho(projection_matrix, window_width, window_height);
         make_world_to_window_transform(view_matrix, window_rect, view_rect);
         matrix_multiply(projection_matrix, view_matrix, world_transform_matrix);
+
+        // setup full screen copy vertices for window size
 
         gl_vertex_textured quad[3] = { { 0, 0, 0, 0 }, { (float)window_size.x * 2, 0, 2, 0 }, { 0, (float)window_size.y * 2, 0, 2 } };
         fullscreen_blit_verts.activate();
@@ -1237,6 +1255,9 @@ namespace gerber_3d
 
         glEnable(GL_BLEND);
 
+        glLineWidth(outline_thickness);
+        // draw layers in reverse so top layer (which is first in the list) is drawn last
+
         for(size_t n = layers.size(); n != 0;) {
 
             gerber_layer *layer = layers[--n];
@@ -1245,46 +1266,45 @@ namespace gerber_3d
 
                 // draw the gerber layer into the render texture
 
-                #define SHOW_DIRECT
+                layer_program.use();
+#if defined(OFFSCREEN_LAYER_DRAW)
+                my_target.bind_framebuffer();
+#endif
+                GL_CHECK(glUniformMatrix4fv(layer_program.transform_location, 1, true, world_transform_matrix));
 
-                #if !defined(SHOW_DIRECT)
-                render_target.activate();
-                #endif
-
-                solid_program.use();
-                GL_CHECK(glUniformMatrix4fv(solid_program.transform_location, 1, true, world_transform_matrix));
-                GL_CHECK(glClearColor(0, 0, 0, 0));
+#if defined(OFFSCREEN_LAYER_DRAW)
+                GL_CHECK(glClearColor(0,0,0,0));
                 GL_CHECK(glClear(GL_COLOR_BUFFER_BIT));
+#endif
+                layer->draw(wireframe, outline_thickness);
 
-                layer->draw(wireframe);
+#if defined(OFFSCREEN_LAYER_DRAW)
+
+                // draw the render to the window
 
                 glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 
-                #if !defined(SHOW_DIRECT)
-                // draw the render texture to the window
-
                 GL_CHECK(glBindFramebuffer(GL_FRAMEBUFFER, 0));
-
-                render_target.bind();
 
                 textured_program.use();
 
-                fullscreen_blit_verts.activate();
+                my_target.bind_textures();
 
-                gl_color::float4 fill(layer->fill_color);
-                gl_color::float4 clear(layer->clear_color);
-                gl_color::float4 outline(layer->outline_color);
-
-                glUniform4fv(textured_program.color_r_location, 1, fill);
-                glUniform4fv(textured_program.color_g_location, 1, clear);
-                glUniform4fv(textured_program.color_b_location, 1, outline);
-
+                gl_color::float4 rc(layer->fill_color);
+                gl_color::float4 gc(layer->clear_color);
+                gl_color::float4 bc(layer->outline_color);
+                glUniform4fv(textured_program.red_color_uniform, 1, (GLfloat *)&rc);
+                glUniform4fv(textured_program.green_color_uniform, 1, (GLfloat *)&gc);
+                glUniform4fv(textured_program.blue_color_uniform, 1, (GLfloat *)&bc);
+                glUniform1f(textured_program.alpha_uniform, layer->alpha / 255.0f);
+                glUniform1i(textured_program.num_samples_uniform, my_target.num_samples);
+                glUniform1i(textured_program.cover_sampler, 0);
                 glUniformMatrix4fv(textured_program.transform_location, 1, true, projection_matrix);
 
-                glUniform1i(textured_program.num_samples_uniform, render_target.num_samples);
+                fullscreen_blit_verts.activate();
 
                 glBlendEquationSeparate(GL_FUNC_ADD, GL_FUNC_ADD);
-                glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ZERO);
+                glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
                 glDrawArrays(GL_TRIANGLES, 0, 3);
 #endif
             }
@@ -1292,6 +1312,7 @@ namespace gerber_3d
 
         // create overlay drawlist (axes, extents etc)
 
+        glLineWidth(1);
         overlay.reset();
         if(mouse_mode == mouse_drag_zoom_select) {
             rect drag_rect_corrected = correct_aspect_ratio(window_rect.aspect_ratio(), drag_rect, aspect_expand);

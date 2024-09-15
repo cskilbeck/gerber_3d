@@ -37,6 +37,7 @@ LOG_CONTEXT("gl_base", debug);
 namespace gerber_3d
 {
     //////////////////////////////////////////////////////////////////////
+    // SOLID VERTEX
 
     char const *solid_vertex_shader_source = R"!(
 
@@ -57,6 +58,7 @@ namespace gerber_3d
     )!";
 
     //////////////////////////////////////////////////////////////////////
+    // COLOR-PER-VERT VERTEX
 
     char const *color_vertex_shader_source = R"!(
 
@@ -77,6 +79,7 @@ namespace gerber_3d
     )!";
 
     //////////////////////////////////////////////////////////////////////
+    // SOLID / COLOR FRAGMENT
 
     char const *common_fragment_shader_source = R"!(
 
@@ -93,6 +96,46 @@ namespace gerber_3d
     )!";
 
     //////////////////////////////////////////////////////////////////////
+    // LAYER VERTEX
+
+    char const *layer_vertex_shader_source = R"!(
+
+        #version 400
+
+        uniform mat4 transform;
+        uniform vec4 cover_in;
+
+        in vec2 position;
+
+        out vec4 cover;
+
+        void main() {
+            gl_Position = transform * vec4(position, 0.0f, 1.0f);
+            cover = cover_in;
+        }
+
+    )!";
+
+    //////////////////////////////////////////////////////////////////////
+    // LAYER FRAGMENT
+
+    char const *layer_fragment_shader_source = R"!(
+
+        #version 400
+
+        in vec4 cover;
+
+        out vec4 fragment1;
+        out vec4 fragment2;
+
+        void main() {
+            fragment2 = vec4(cover);
+        }
+
+    )!";
+
+    //////////////////////////////////////////////////////////////////////
+    // FULLSCREEN VERTEX
 
     char const *textured_vertex_shader_source = R"!(
 
@@ -106,13 +149,14 @@ namespace gerber_3d
         uniform mat4 transform;
 
         void main() {
-            gl_Position = transform * vec4(position.xy, 0.0f, 1.0f);
+            gl_Position = transform * vec4(position.xy, 0.0f, 1);
             tex_coord = tex_coord_in;
         }
 
     )!";
 
     //////////////////////////////////////////////////////////////////////
+    // FULLSCREEN FRAGMENT
 
     char const *textured_fragment_shader_source = R"!(
 
@@ -122,18 +166,18 @@ namespace gerber_3d
         
         out vec4 fragment;
 
-        uniform vec4 color_red;     // FILL
-        uniform vec4 color_green;   // CLEAR
-        uniform vec4 color_blue;    // OUTLINE
+        uniform vec4 red_color;
+        uniform vec4 green_color;
+        uniform vec4 blue_color;
 
+        uniform float alpha;
         uniform int num_samples;
 
-        uniform sampler2DMS texture_sampler;
+        uniform sampler2DMS cover_sampler;
 
         vec4 multisample(sampler2DMS sampler, ivec2 coord)
         {
-            vec4 color = vec4(0.0);
-
+            vec4 color = vec4(0,0,0,0);
             for (int i = 0; i < num_samples; i++) {
                 color += texelFetch(sampler, coord, i);
             }
@@ -141,12 +185,16 @@ namespace gerber_3d
         }
 
         void main() {
-            ivec2 texSize = textureSize(texture_sampler);
-            ivec2 texCoord = ivec2(tex_coord * texSize);
-            vec4 col = multisample(texture_sampler, texCoord);
-            vec4 color = col.x * color_red + col.y * color_green + col.z * color_blue;
-            color.w *= col.x;
-            fragment = color;
+
+            ivec2 tex_size = textureSize(cover_sampler);
+            ivec2 uv = ivec2(tex_coord * tex_size);
+            vec4 cover = multisample(cover_sampler, uv);
+            vec4 r = vec4(cover.xxxx * red_color);
+            vec4 g = vec4(cover.yyyy * green_color);
+            vec4 b = vec4(cover.zzzz * blue_color);
+            vec4 rgb = r + g + b;
+            rgb.w *= alpha;
+            fragment = rgb;
         }
 
     )!";
@@ -170,7 +218,7 @@ namespace gerber_3d
         if(length != 0) {
             GLchar *info_log = new GLchar[length];
             GL_CHECK(glGetShaderInfoLog(id, length, &length, info_log));
-            LOG_ERROR("Error in shader: {}", info_log);
+            LOG_ERROR("Error in shader \"{}\": {}", program_name, info_log);
             delete[] info_log;
         } else {
             LOG_ERROR("Huh? Compile error but no log?");
@@ -192,7 +240,7 @@ namespace gerber_3d
         if(length != 0) {
             GLchar *info_log = new GLchar[length];
             GL_CHECK(glGetProgramInfoLog(program_id, length, &length, info_log));
-            LOG_ERROR("Error in program: {}", info_log);
+            LOG_ERROR("Error in program \"{}\": {}", program_name, info_log);
             delete[] info_log;
         } else if(param == GL_LINK_STATUS) {
             LOG_ERROR("glLinkProgram failed: Can not link program.");
@@ -217,12 +265,14 @@ namespace gerber_3d
         int rc = validate(GL_LINK_STATUS);
         if(rc != 0) {
             cleanup();
+            LOG_ERROR("validate error for init() {}", program_name);
             return rc;
         }
         GL_CHECK(glValidateProgram(program_id));
         rc = validate(GL_VALIDATE_STATUS);
         if(rc != 0) {
             cleanup();
+            LOG_ERROR("glValidateProgram error for {}", program_name);
             return rc;
         }
         use();
@@ -237,7 +287,7 @@ namespace gerber_3d
         int location;
         GL_CHECK(location = glGetUniformLocation(program_id, name));
         if(location == (GLuint)-1) {
-            LOG_WARNING("Can't get uniform location for {} in program {}", name, program_name);
+            LOG_WARNING("Can't get uniform location for \"{}\" in program \"{}\"", name, program_name);
         }
         return location;
     }
@@ -249,7 +299,7 @@ namespace gerber_3d
         int location;
         GL_CHECK(location = glGetAttribLocation(program_id, name));
         if(location == (GLuint)-1) {
-            LOG_ERROR("Can't get attribute location for {} in program {}", name, program_name);
+            LOG_ERROR("Can't get attribute location for \"{}\" in program \"{}\"", name, program_name);
         }
         return location;
     }
@@ -259,6 +309,29 @@ namespace gerber_3d
     void gl_program::use() const
     {
         GL_CHECK(glUseProgram(program_id));
+    }
+
+    //////////////////////////////////////////////////////////////////////
+
+    int gl_layer_program::init()
+    {
+        program_name = "layer";
+        vertex_shader_source = layer_vertex_shader_source;
+        fragment_shader_source = layer_fragment_shader_source;
+        int err = gl_program::init();
+        if(err != 0) {
+            return err;
+        }
+        cover_location = get_uniform("cover_in");
+        return 0;
+    }
+
+    //////////////////////////////////////////////////////////////////////
+
+    void gl_layer_program::set_color(uint32_t cover) const
+    {
+        gl_color::float4 cov = gl_color::to_floats(cover);
+        GL_CHECK(glUniform4f(cover_location, cov[0], cov[1], cov[2], cov[3]));
     }
 
     //////////////////////////////////////////////////////////////////////
@@ -305,11 +378,13 @@ namespace gerber_3d
         if(err != 0) {
             return err;
         }
+        red_color_uniform = get_uniform("red_color");
+        green_color_uniform = get_uniform("green_color");
+        blue_color_uniform = get_uniform("blue_color");
+
+        alpha_uniform = get_uniform("alpha");
+        cover_sampler = get_uniform("cover_sampler");
         num_samples_uniform = get_uniform("num_samples");
-        sampler_location = get_uniform("texture_sampler");
-        color_r_location = get_uniform("color_red");
-        color_g_location = get_uniform("color_green");
-        color_b_location = get_uniform("color_blue");
         return 0;
     }
 
@@ -486,11 +561,10 @@ namespace gerber_3d
 
     //////////////////////////////////////////////////////////////////////
 
-    void gl_texture::cleanup()
+    int gl_texture::bind() const
     {
-        GL_CHECK(glBindTexture(GL_TEXTURE_2D, 0));
-        GLuint t[] = { texture_id };
-        GL_CHECK(glDeleteTextures(1, t));
+        GL_CHECK(glBindTexture(GL_TEXTURE_2D, texture_id));
+        return 0;
     }
 
     //////////////////////////////////////////////////////////////////////
@@ -503,58 +577,78 @@ namespace gerber_3d
 
     //////////////////////////////////////////////////////////////////////
 
-    int gl_texture::activate(GLuint slot) const
+    void gl_texture::cleanup()
     {
-        GL_CHECK(glActiveTexture(GL_TEXTURE0 + slot));
-        GL_CHECK(glBindTexture(GL_TEXTURE_2D, texture_id));
-        return 0;
+        GL_CHECK(glBindTexture(GL_TEXTURE_2D, 0));
+        GLuint t[] = { texture_id };
+        GL_CHECK(glDeleteTextures(1, t));
     }
 
     //////////////////////////////////////////////////////////////////////
 
-    int gl_render_target::init(GLuint new_width, GLuint new_height, GLuint multisample_count)
+    int gl_render_target::init(GLuint new_width, GLuint new_height, GLuint multisample_count, GLuint slots)
     {
         num_samples = multisample_count;
+        num_slots = slots;
 
         if(new_width != 0 && new_height != 0) {
 
-            GL_CHECK(glGenTextures(1, &texture_id));
-            GL_CHECK(glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, texture_id));
-            GL_CHECK(glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, multisample_count, GL_RGBA, new_width, new_height, GL_FALSE));
-            //GL_CHECK(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP));
-            //GL_CHECK(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP));
-            //GL_CHECK(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST));
-            //GL_CHECK(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST));
-            GL_CHECK(glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, 0));
-
             GL_CHECK(glGenFramebuffers(1, &fbo));
             GL_CHECK(glBindFramebuffer(GL_FRAMEBUFFER, fbo));
-            GL_CHECK(glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D_MULTISAMPLE, texture_id, 0));
+
+            GLuint slot = 0;
+            for(GLuint i = 0; i < num_slots; ++i) {
+                GLuint texture_id;
+                GL_CHECK(glGenTextures(1, &texture_id));
+                GL_CHECK(glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, texture_id));
+                GL_CHECK(glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, multisample_count, GL_RGBA, new_width, new_height, GL_FALSE));
+                GL_CHECK(glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + slot, GL_TEXTURE_2D_MULTISAMPLE, texture_id, 0));
+                texture_ids.push_back(texture_id);
+                slot += 1;
+            }
+
             GLenum err = glCheckFramebufferStatus(GL_FRAMEBUFFER);
             if(err != GL_FRAMEBUFFER_COMPLETE) {
-                LOG_ERROR("glCheckFramebufferStatus failed: {}", err);
+                LOG_ERROR("glCheckFramebufferStatus failed: {:04x}", err);
                 cleanup();
                 return 1;
             }
             width = new_width;
             height = new_height;
+
             GL_CHECK(glBindFramebuffer(GL_FRAMEBUFFER, 0));
+            GL_CHECK(glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, 0));
         }
         return 0;
     }
 
     //////////////////////////////////////////////////////////////////////
 
-    void gl_render_target::activate() const
+    void gl_render_target::bind_framebuffer() const
     {
+        bind_textures();
         glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+        for(GLuint slot = 0; slot < num_slots;  ++slot) {
+            GL_CHECK(glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + slot, GL_TEXTURE_2D_MULTISAMPLE, texture_ids[slot], 0));
+        }
+        std::vector<GLenum> buffers;
+        buffers.reserve(num_slots);
+        GLenum a = GL_COLOR_ATTACHMENT0;
+        for(GLuint i = 0; i < num_slots; ++i) {
+            buffers.push_back(a);
+            a += 1;
+        }
+        GL_CHECK(glNamedFramebufferDrawBuffers(fbo, num_slots, buffers.data()));
     }
 
     //////////////////////////////////////////////////////////////////////
 
-    void gl_render_target::bind()
+    void gl_render_target::bind_textures() const
     {
-        glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, texture_id);
+        for(GLuint slot = 0; slot < num_slots;  ++slot) {
+            GL_CHECK(glActiveTexture(GL_TEXTURE0 + slot));
+            GL_CHECK(glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, texture_ids[slot]));
+        }
     }
 
     //////////////////////////////////////////////////////////////////////
@@ -564,10 +658,10 @@ namespace gerber_3d
         GL_CHECK(glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, 0));
         GL_CHECK(glBindFramebuffer(GL_FRAMEBUFFER, 0));
 
-        GLuint t[1] = { texture_id };
-        GLuint f[] = { fbo };
+        GLuint *t = texture_ids.data();
+        GL_CHECK(glDeleteTextures(num_slots, t));
 
-        GL_CHECK(glDeleteTextures(1, t));
+        GLuint f[] = { fbo };
         GL_CHECK(glDeleteFramebuffers(1, f));
     }
 

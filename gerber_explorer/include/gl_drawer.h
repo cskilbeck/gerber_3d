@@ -25,11 +25,11 @@ namespace gerber_3d
         void on_finished_loading() override;
         void fill_elements(gerber_lib::gerber_draw_element const *elements, size_t num_elements, gerber_lib::gerber_polarity polarity, int entity_id) override;
 
-        void draw(bool fill, uint32_t fill_color, uint32_t clear_color, bool outline, uint32_t outline_color, bool wireframe);
+        void draw(bool fill, bool outline, bool wireframe, float outline_thickness);
 
         gerber_lib::gerber *gerber_file{};
 
-        std::vector<gl_vertex_solid> vertices;      // all the verts for all the entities in this file
+        std::vector<gl_vertex_solid> vertices;    // all the verts for all the entities in this file
         std::vector<GLuint> triangle_indices;
 
         gl_vertex_array_solid vertex_array;
@@ -37,7 +37,7 @@ namespace gerber_3d
 
         boundary_tesselator tesselator{};
 
-        gl_solid_program *program{};
+        gl_layer_program *program{};
 
         gl_drawer() = default;
 
