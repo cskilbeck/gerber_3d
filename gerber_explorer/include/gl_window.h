@@ -52,7 +52,7 @@ namespace gerber_3d
             uint32_t clear_color;
             uint32_t outline_color;
 
-            void draw();
+            void draw(bool wireframe);
 
             bool operator<(gerber_layer const &other)
             {

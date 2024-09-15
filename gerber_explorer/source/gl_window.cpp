@@ -168,6 +168,7 @@ namespace gerber_3d
         save_bool("show_extent", show_extent);
         save_bool("show_stats", show_stats);
         save_bool("show_options", show_options);
+        save_bool("wireframe", wireframe);
         save_uint("background_color", background_color);
         save_int("multisample_count", multisample_count);
 
@@ -191,6 +192,7 @@ namespace gerber_3d
         load_bool("show_extent", show_extent);
         load_bool("show_stats", show_stats);
         load_bool("show_options", show_options);
+        load_bool("wireframe", wireframe);
         load_uint("background_color", background_color);
         load_int("multisample_count", multisample_count);
 
@@ -400,9 +402,9 @@ namespace gerber_3d
 
     //////////////////////////////////////////////////////////////////////
 
-    void gl_window::gerber_layer::draw()
+    void gl_window::gerber_layer::draw(bool wireframe)
     {
-        layer->draw(fill, fill_color, clear_color, outline, outline_color);
+        layer->draw(fill, fill_color, clear_color, outline, outline_color, wireframe);
     }
 
     //////////////////////////////////////////////////////////////////////
@@ -699,15 +701,17 @@ namespace gerber_3d
 
         case WM_GERBER_WAS_LOADED: {
             gl_drawer *drawer = (gl_drawer *)lParam;
-            drawer->on_finished_loading();
-            gerber_layer *layer = new gerber_layer();
-            layer->layer = drawer;
-            layer->fill_color = layer_colors[layers.size() % gerber_util::array_length(layer_colors)] & 0x80ffffff;
-            layer->clear_color = gl_color::clear;
-            layer->outline_color = gl_color::white;
-            layer->outline = false;
-            layer->filename = std::filesystem::path(drawer->gerber_file->filename).filename().string();
-            layers.push_back(layer);
+            if(drawer != nullptr) {
+                drawer->on_finished_loading();
+                gerber_layer *layer = new gerber_layer();
+                layer->layer = drawer;
+                layer->fill_color = layer_colors[layers.size() % gerber_util::array_length(layer_colors)] & 0x80ffffff;
+                layer->clear_color = gl_color::clear;
+                layer->outline_color = gl_color::white;
+                layer->outline = false;
+                layer->filename = std::filesystem::path(drawer->gerber_file->filename).filename().string();
+                layers.push_back(layer);
+            }
         } break;
 
         case WM_FIT_TO_WINDOW: {
@@ -1241,22 +1245,22 @@ namespace gerber_3d
 
                 // draw the gerber layer into the render texture
 
+                #define SHOW_DIRECT
+
+                #if !defined(SHOW_DIRECT)
                 render_target.activate();
+                #endif
+
                 solid_program.use();
                 GL_CHECK(glUniformMatrix4fv(solid_program.transform_location, 1, true, world_transform_matrix));
                 GL_CHECK(glClearColor(0, 0, 0, 0));
                 GL_CHECK(glClear(GL_COLOR_BUFFER_BIT));
 
-                if(wireframe) {
-                    glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-                } else {
-                    glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-                }
-
-                layer->draw();
+                layer->draw(wireframe);
 
                 glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 
+                #if !defined(SHOW_DIRECT)
                 // draw the render texture to the window
 
                 GL_CHECK(glBindFramebuffer(GL_FRAMEBUFFER, 0));
@@ -1282,6 +1286,7 @@ namespace gerber_3d
                 glBlendEquationSeparate(GL_FUNC_ADD, GL_FUNC_ADD);
                 glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ZERO);
                 glDrawArrays(GL_TRIANGLES, 0, 3);
+#endif
             }
         }
 

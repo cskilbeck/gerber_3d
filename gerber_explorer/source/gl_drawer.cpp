@@ -27,13 +27,16 @@ namespace
 {
     using namespace gerber_lib;
 
-    template <typename T> bool is_clockwise(std::vector<T> const &points)
+    bool is_clockwise(std::vector<vec2d> const &points, size_t start, size_t end)
     {
-        double t = 0;
-        for(size_t i = 0, n = points.size() - 1; i < points.size(); n = i++) {
-            t += (points[i].x - points[n].x) * (points[i].y + points[n].y);
+        double sum = 0;
+        for(size_t i = start, n = end - 1; i != end; n = i++) {
+            vec2d const &p1 = points[i];
+            vec2d const &p2 = points[n];
+            sum += (p2.x - p1.x) * (p2.y + p1.y);
         }
-        return t >= 0;
+        return sum < 0;    // Negative sum indicates clockwise orientation
+
     }
 }    // namespace
 
@@ -44,31 +47,37 @@ namespace gerber_3d
     void gl_drawer::set_gerber(gerber *g)
     {
         gerber_file = g;
-        triangulator.clear();
+        current_entity_id = -1;
+
+        tesselator.clear();
+
         g->draw(*this);
-    }
 
-    //////////////////////////////////////////////////////////////////////
-
-    void gl_drawer::on_finished_loading()
-    {
-        if(triangulator.vertices.size() != 0 && triangulator.indices.size() != 0) {
-            vertex_array.init(*program, (GLsizei)triangulator.vertices.size());
-            vertex_array.activate();
-            indices_triangles.init((GLsizei)triangulator.indices.size());
-            indices_triangles.activate();
-            triangulator.finalize();
-        }
+        tesselator.new_entity(current_entity_id, current_flag);
+        tesselator.finalize();
     }
 
     //////////////////////////////////////////////////////////////////////
 
     void gl_drawer::fill_elements(gerber_draw_element const *elements, size_t num_elements, gerber_polarity polarity, int entity_id)
     {
-        double constexpr THRESHOLD = 1e-38;
-        double constexpr ARC_DEGREES = 2;
+        // LOG_DEBUG("ENTITY ID {} HAS {} elements, polarity is {}", entity_id, num_elements, polarity);
 
-        std::vector<vec2d> points;
+        double constexpr THRESHOLD = 1e-38;
+        double constexpr ARC_DEGREES = 3.6;
+
+        uint32_t flag = polarity == polarity_clear ? 1 : 0;
+
+        if(entity_id != current_entity_id) {
+            tesselator.new_entity(entity_id, flag);
+        }
+
+        current_flag = flag;
+        current_entity_id = entity_id;
+
+        // we need these points to persist!
+        std::vector<vec2d> &points = tesselator.points;
+        size_t offset = points.size();
 
         // add a point to the list if it's more than ## away from the previous point
 
@@ -88,32 +97,42 @@ namespace gerber_3d
         // create array of points, approximating arcs
 
         for(size_t n = 0; n < num_elements; ++n) {
+
             gerber_draw_element const &element = elements[n];
+
             switch(element.draw_element_type) {
+
             case draw_element_line:
                 add_point(element.line_end.x, element.line_end.y);
                 break;
-            case draw_element_arc:
-                double final_angle = element.end_degrees;
-                if(element.start_degrees < element.end_degrees) {
-                    for(double t = element.start_degrees; t < element.end_degrees; t += ARC_DEGREES) {
+
+            case draw_element_arc: {
+
+                double start = element.start_degrees;
+                double end = element.end_degrees;
+
+                double final_angle = end;
+
+                if(start < end) {
+                    for(double t = start; t < end; t += ARC_DEGREES) {
                         add_arc_point(element, t);
                         final_angle = t;
                     }
                 } else {
-                    for(double t = element.start_degrees; t > element.end_degrees; t -= ARC_DEGREES) {
+                    for(double t = start; t > end; t -= ARC_DEGREES) {
                         add_arc_point(element, t);
                         final_angle = t;
                     }
                 }
-                if(final_angle != element.end_degrees) {
-                    add_arc_point(element, element.end_degrees);
+                if(final_angle != end) {
+                    add_arc_point(element, end);
                 }
-                break;
+            } break;
             }
         }
 
-        if(points.empty()) {
+        if(points.size() < 3) {
+            LOG_WARNING("CULLED SECTION OF ENTITY {}", entity_id);
             return;
         }
 
@@ -122,14 +141,21 @@ namespace gerber_3d
             points.pop_back();
         }
 
+        // force clockwise ordering
+
+        if(!is_clockwise(points, offset, points.size())) {
+            // LOG_DEBUG("REVERSING entity {} from {} to {}", entity_id, offset, points.size());
+            std::reverse(points.begin() + offset, points.end());
+        }
+
         // triangulate the points
 
-        triangulator.append(points.data(), (int)points.size(), polarity == polarity_clear ? 1 : 0);
+        tesselator.append_points(offset);
     }
 
     //////////////////////////////////////////////////////////////////////
 
-    void gl_drawer::draw(bool fill, uint32_t fill_color, uint32_t clear_color, bool outline, uint32_t outline_color)
+    void gl_drawer::draw(bool fill, uint32_t fill_color, uint32_t clear_color, bool outline, uint32_t outline_color, bool wireframe)
     {
         program->use();
         vertex_array.activate();
@@ -138,24 +164,52 @@ namespace gerber_3d
         glBlendEquationSeparate(GL_FUNC_ADD, GL_FUNC_ADD);
         glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-        for(size_t n = 0; n < triangulator.draw_calls.size(); ++n) {
-
-            tesselator_draw_call &d = triangulator.draw_calls[n];
-
+        for(auto const &e : tesselator.entities) {
             if(fill) {
-                if(d.flags & 1) {
-                    program->set_color(0xff00ff00); // green is cleared sections
-                } else {
-                    program->set_color(0xff0000ff); // red is filled sections
+                glPolygonMode(GL_FRONT_AND_BACK, wireframe ? GL_LINE : GL_FILL);
+                program->set_color(e.flags & 1 ? 0xff00ff00 : 0xff0000ff);    // green is cleared sections, red is filled sections
+                int end = e.num_fills + e.first_fill;
+                for(int i = e.first_fill; i < end; ++i) {
+                    tesselator_span const &s = tesselator.fills[i];
+                    glDrawElements(GL_TRIANGLES, s.length, GL_UNSIGNED_INT, (void *)(s.start * sizeof(GLuint)));
                 }
-                d.draw_filled();
             }
-
             if(outline) {
-                program->set_color(0xffff0000); // outlines are blue
-                d.draw_outline();
+                glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+                program->set_color(0xffff0000);    // outlines are blue
+                int end = e.num_outlines + e.first_outline;
+                for(int i = e.first_outline; i < end; ++i) {
+                    tesselator_span const &s = tesselator.boundaries[i];
+                    glDrawArrays(GL_LINE_LOOP, s.start, s.length);
+                }
             }
         }
+    }
+
+    //////////////////////////////////////////////////////////////////////
+
+    void gl_drawer::on_finished_loading()
+    {
+        GLsizei num_verts = (GLsizei)tesselator.vertices.size();
+        GLsizei num_indices = (GLsizei)tesselator.indices.size();
+        gl_vertex_solid *vtx = tesselator.vertices.data();
+        GLuint *idx = tesselator.indices.data();
+
+        if(num_verts == 0 || num_indices == 0) {
+            LOG_WARNING("Huh? No shapes in gerber file {}", gerber_file->filename);
+            return;
+        }
+        vertex_array.init(*program, num_verts);
+        vertex_array.activate();
+        indices_triangles.init(num_indices);
+        indices_triangles.activate();
+
+        gl_vertex_solid *v = (gl_vertex_solid *)glMapBuffer(GL_ARRAY_BUFFER, GL_WRITE_ONLY);
+        GLuint *i = (GLuint *)glMapBuffer(GL_ELEMENT_ARRAY_BUFFER, GL_WRITE_ONLY);
+        memcpy(v, vtx, num_verts * sizeof(gl_vertex_solid));
+        memcpy(i, idx, num_indices * sizeof(GLuint));
+        glUnmapBuffer(GL_ELEMENT_ARRAY_BUFFER);
+        glUnmapBuffer(GL_ARRAY_BUFFER);
     }
 
 }    // namespace gerber_3d

@@ -9,7 +9,7 @@ namespace gerber_lib
 
     inline double round_precise(double x, int precision)
     {
-        double p = pow(10, static_cast<double>(precision));
+        double p = std::pow(10.0, precision);
         return round(x * p) / p;
     }
 

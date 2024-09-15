@@ -59,8 +59,11 @@ namespace gerber_lib
 
     template <typename... args> constexpr void log(gerber_log_level level, gerber_log_context const &context, char const *fmt, args &&...arguments)
     {
-        if(level >= log_level && level >= context.max_level) {
+        if(level == log_level_fatal || level >= log_level && level >= context.max_level) {
             gerber_log(level, context.context, fmt, std::make_format_args(arguments...));
+        }
+        if(level == log_level_fatal) {
+            __debugbreak();
         }
     }
 
@@ -80,3 +83,9 @@ namespace gerber_lib
 #define LOG_WARNING(msg, ...) ::gerber_lib::log(::gerber_lib::log_level_warning, __log_context, msg, ##__VA_ARGS__)
 #define LOG_ERROR(msg, ...) ::gerber_lib::log(::gerber_lib::log_level_error, __log_context, msg, ##__VA_ARGS__)
 #define LOG_FATAL(msg, ...) ::gerber_lib::log(::gerber_lib::log_level_fatal, __log_context, msg, ##__VA_ARGS__)
+
+#define GERBER_ASSERT(x)                                                             \
+    do                                                                               \
+        if(!(x))                                                                     \
+            LOG_FATAL("ASSERT FAILED: {} at line {} of {}", #x, __LINE__, __FILE__); \
+    while(false)
