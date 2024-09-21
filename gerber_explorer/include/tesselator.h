@@ -50,6 +50,7 @@ namespace gerber_3d
 
         using vert = gerber_3d::gl_vertex_solid;
         using vec2d = gerber_lib::vec2d;
+        using rect = gerber_lib::rect;
 
         boundary_tesselator() = default;
 
@@ -74,6 +75,8 @@ namespace gerber_3d
         void finalize();
 
         void pick_entities(vec2d const &world_pos, std::list<tesselator_entity const *> &picked);
+        void select_touching_entities(rect const &world_rect, std::list<tesselator_entity const *> &picked);
+        void select_enclosed_entities(rect const &world_rect, std::list<tesselator_entity const *> &picked);
 
         //////////////////////////////////////////////////////////////////////
         // internals for libglu tesselator

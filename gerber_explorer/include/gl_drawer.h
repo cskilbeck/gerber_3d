@@ -26,6 +26,7 @@ namespace gerber_3d
         void fill_elements(gerber_lib::gerber_draw_element const *elements, size_t num_elements, gerber_lib::gerber_polarity polarity, int entity_id) override;
 
         void draw(bool fill, bool outline, bool wireframe, float outline_thickness);
+        void fill_entities(std::list<tesselator_entity const *> const &entities);
 
         gerber_lib::gerber *gerber_file{};
 

@@ -54,7 +54,7 @@ namespace gerber_3d
             uint32_t clear_color;
             uint32_t outline_color;
 
-            std::list<tesselator_entity const *> hovered_entities;
+            std::list<tesselator_entity const *> selected_entities;
 
             void draw(bool wireframe, float outline_thickness);
 

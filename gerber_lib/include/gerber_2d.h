@@ -141,6 +141,20 @@ namespace gerber_lib
 
             //////////////////////////////////////////////////////////////////////
 
+            bool contains_rect(rect const &r) const
+            {
+                return r.min_pos.x >= min_pos.x && r.max_pos.x <= max_pos.x && r.min_pos.y >= min_pos.y && r.max_pos.y <= max_pos.y;
+            }
+
+            //////////////////////////////////////////////////////////////////////
+
+            bool overlaps_rect(rect const &b) const
+            {
+                return (!(max_pos.x < b.min_pos.x || b.max_pos.x < min_pos.x || max_pos.y < b.min_pos.y || b.max_pos.y < min_pos.y));
+            }
+
+            //////////////////////////////////////////////////////////////////////
+
             double x() const
             {
                 return min_pos.x;

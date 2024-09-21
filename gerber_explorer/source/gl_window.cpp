@@ -35,8 +35,6 @@
 
 LOG_CONTEXT("gl_window", info);
 
-#define OFFSCREEN_LAYER_DRAW
-
 namespace
 {
     //////////////////////////////////////////////////////////////////////
@@ -402,12 +400,7 @@ namespace gerber_3d
 
     void gl_window::gerber_layer::draw(bool wireframe, float outline_thickness)
     {
-#if defined(OFFSCREEN_LAYER_DRAW)
         layer->draw(fill, outline, wireframe, outline_thickness);
-        // layer->draw(fill, gl_color::red, gl_color::green, outline, gl_color::blue, wireframe);
-#else
-        layer->draw(fill, fill_color, clear_color, outline, outline_color, wireframe);
-#endif
     }
 
     //////////////////////////////////////////////////////////////////////
@@ -456,10 +449,14 @@ namespace gerber_3d
             drag_rect = {};
             break;
 
-        case mouse_drag_maybe_select:
+        case mouse_drag_maybe_select: {
             begin();
             drag_mouse_start_pos = pos;
-            break;
+            vec2d world_pos = world_pos_from_window_pos(pos);
+            for(auto const &l : layers) {
+                l->layer->tesselator.pick_entities(world_pos, l->selected_entities);
+            }
+        } break;
 
         case mouse_drag_select:
             begin();
@@ -502,9 +499,7 @@ namespace gerber_3d
         case mouse_drag_maybe_select: {
             if(mouse_pos.subtract(drag_mouse_start_pos).length() > drag_select_offset_start_distance) {
                 set_mouse_mode(mouse_drag_select, mouse_pos);
-                // entities_clicked.clear();
-                // highlight_entity = false;
-                // select_entities(drag_rect, (GetKeyState(VK_SHIFT) & 0x8000) == 0);
+                mouse_world_pos = world_pos_from_window_pos(mouse_pos);
             }
         } break;
 
@@ -515,13 +510,6 @@ namespace gerber_3d
         } break;
 
         case mouse_drag_none: {
-            mouse_world_pos = world_pos_from_window_pos(mouse_pos);
-            if((GetKeyState('H') & 0x8000) != 0) {
-                for(auto const &l : layers) {
-                    l->layer->tesselator.pick_entities(mouse_world_pos, l->hovered_entities);
-                }
-            }
-
         } break;
 
         default:
@@ -1267,18 +1255,12 @@ namespace gerber_3d
                 // draw the gerber layer into the render texture
 
                 layer_program.use();
-#if defined(OFFSCREEN_LAYER_DRAW)
                 my_target.bind_framebuffer();
-#endif
                 GL_CHECK(glUniformMatrix4fv(layer_program.transform_location, 1, true, world_transform_matrix));
 
-#if defined(OFFSCREEN_LAYER_DRAW)
                 GL_CHECK(glClearColor(0,0,0,0));
                 GL_CHECK(glClear(GL_COLOR_BUFFER_BIT));
-#endif
                 layer->draw(wireframe, outline_thickness);
-
-#if defined(OFFSCREEN_LAYER_DRAW)
 
                 // draw the render to the window
 
@@ -1306,10 +1288,19 @@ namespace gerber_3d
                 glBlendEquationSeparate(GL_FUNC_ADD, GL_FUNC_ADD);
                 glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
                 glDrawArrays(GL_TRIANGLES, 0, 3);
-#endif
+
             }
         }
 
+        // now let's draw a (some?) selected entites directly onto the screen
+        solid_program.use();
+        GL_CHECK(glUniformMatrix4fv(solid_program.transform_location, 1, true, world_transform_matrix));
+
+        solid_program.set_color(0xffffffff);
+
+        for(auto const &l : layers) {
+            l->layer->fill_entities(l->selected_entities);
+        }
         // create overlay drawlist (axes, extents etc)
 
         glLineWidth(1);

@@ -93,7 +93,7 @@ namespace gerber_3d
 
     struct gl_layer_program : gl_program
     {
-        GLuint cover_location{};
+        GLuint color_location{};
 
         int init() override;
 

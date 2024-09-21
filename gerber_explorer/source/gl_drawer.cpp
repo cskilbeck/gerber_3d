@@ -155,6 +155,26 @@ namespace gerber_3d
 
     //////////////////////////////////////////////////////////////////////
 
+    void gl_drawer::fill_entities(std::list<tesselator_entity const *> const &entities)
+    {
+        vertex_array.activate();
+        indices_triangles.activate();
+
+        glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+        glBlendEquationSeparate(GL_FUNC_ADD, GL_FUNC_ADD);
+        glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+        for(auto const e : entities) {
+            int end = e->num_fills + e->first_fill;
+            for(int i = e->first_fill; i < end; ++i) {
+                tesselator_span const &s = tesselator.fills[i];
+                glDrawElements(GL_TRIANGLES, s.length, GL_UNSIGNED_INT, (void *)(s.start * sizeof(GLuint)));
+            }
+        }
+    }
+
+    //////////////////////////////////////////////////////////////////////
+
     void gl_drawer::draw(bool fill, bool outline, bool wireframe, float outline_thickness)
     {
         program->use();

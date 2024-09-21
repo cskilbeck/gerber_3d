@@ -125,11 +125,10 @@ namespace gerber_3d
 
         in vec4 cover;
 
-        out vec4 fragment1;
-        out vec4 fragment2;
+        out vec4 fragment;
 
         void main() {
-            fragment2 = vec4(cover);
+            fragment = vec4(cover);
         }
 
     )!";
@@ -322,7 +321,7 @@ namespace gerber_3d
         if(err != 0) {
             return err;
         }
-        cover_location = get_uniform("cover_in");
+        color_location = get_uniform("cover_in");
         return 0;
     }
 
@@ -331,7 +330,7 @@ namespace gerber_3d
     void gl_layer_program::set_color(uint32_t cover) const
     {
         gl_color::float4 cov = gl_color::to_floats(cover);
-        GL_CHECK(glUniform4f(cover_location, cov[0], cov[1], cov[2], cov[3]));
+        GL_CHECK(glUniform4f(color_location, cov[0], cov[1], cov[2], cov[3]));
     }
 
     //////////////////////////////////////////////////////////////////////

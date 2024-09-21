@@ -202,6 +202,48 @@ namespace gerber_3d
 
     //////////////////////////////////////////////////////////////////////
 
+    void boundary_tesselator::select_touching_entities(rect const &world_rect, std::list<tesselator_entity const *> &picked)
+    {
+        for(auto const &e : entities) {
+            int outline = e.first_outline;
+            bool hit = false;
+            if(world_rect.overlaps_rect(e.bounds)) {
+                for(int i = 0; i < e.num_outlines && !hit; ++i) {
+                    tesselator_span const &span = boundaries[outline];
+                    int s = span.start;
+                    for(int p = 0; p < span.length; ++p) {
+                        vert const &p1 = vertices[s];
+                        if(world_rect.contains({ p1.x, p1.y })) {
+                            hit = true;
+                            break;
+                        }
+                        vert const &p2 = vertices[++s];
+                        if(world_rect.contains({ p2.x, p2.y })) {
+                            hit = true;
+                            break;
+                        }
+                    }
+                }
+            }
+            if(hit) {
+                picked.push_back(&e);
+            }
+        }
+    }
+
+    //////////////////////////////////////////////////////////////////////
+
+    void boundary_tesselator::select_enclosed_entities(rect const &world_rect, std::list<tesselator_entity const *> &picked)
+    {
+        for(auto const &e : entities) {
+            if(world_rect.contains_rect(e.bounds)) {
+                picked.push_back(&e);
+            }
+        }
+    }
+
+    //////////////////////////////////////////////////////////////////////
+
     void boundary_tesselator::pick_entities(vec2d const &world_pos, std::list<tesselator_entity const *> &picked)
     {
         picked.clear();
